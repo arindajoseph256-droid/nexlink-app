@@ -1,0 +1,85 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#4f6ef7">
+    <link rel="icon" type="image/png" href="{% static 'images/icon.png' %}">
+    <link rel="apple-touch-icon" href="{% static 'images/icon.png' %}">
+    <title>{% block title %}NEXLINK{% endblock %}</title>
+    <script>
+        /* No-flash: apply stored theme before first paint. */
+        (function () {
+            try {
+                var t = localStorage.getItem('nexlink-theme');
+                if (t === 'dark' || (!t && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+                    document.documentElement.setAttribute('data-theme', 'dark');
+                }
+            } catch (e) {}
+        })();
+    </script>
+    <link rel="stylesheet" href="{% static 'css/base.css' %}">
+    {% block extra_css %}{% endblock %}
+</head>
+<body class="{% block body_class %}{% endblock %}">
+    <div class="boot-screen" id="boot-screen" role="status" aria-live="polite" aria-label="Loading NEXLINK">
+        <div class="boot-screen__backdrop" aria-hidden="true"></div>
+        <div class="boot-screen__content">
+            <div class="boot-screen__mark">
+                <img src="{% static 'images/icon.png' %}" alt="">
+            </div>
+            <div class="boot-screen__wordmark">NEXLINK</div>
+            <div class="boot-screen__loading" aria-hidden="true">
+                <span></span><span></span><span></span>
+            </div>
+            <p class="boot-screen__caption">Opening your space</p>
+        </div>
+    </div>
+    {% block body %}
+    <header class="topbar">
+        <a class="topbar__brand" href="{% url 'messaging:conversations' %}">
+            <img class="topbar__logo" src="{% static 'images/icon.png' %}" alt="NEXLINK logo">
+            <span>NEXLINK</span>
+        </a>
+        <nav class="topbar__nav" aria-label="Main navigation">
+            {% if user.is_authenticated %}
+                <a href="{% url 'messaging:conversations' %}" class="nav-link">Chats</a>
+                <a href="{% url 'accounts:profile' %}" class="nav-link">Profile</a>
+                <a href="{% url 'accounts:settings' %}" class="nav-link">Settings</a>
+                <button type="button" id="theme-toggle" class="nav-link nav-link--button"
+                        aria-pressed="false" title="Toggle dark mode">
+                    <span class="theme-toggle__label" aria-hidden="true">Dark</span>
+                </button>
+                <form method="post" action="{% url 'accounts:logout' %}" class="inline-form">
+                    {% csrf_token %}
+                    <button type="submit" class="nav-link nav-link--button">Log out</button>
+                </form>
+            {% else %}
+                <a href="{% url 'accounts:login' %}" class="nav-link">Log in</a>
+                <a href="{% url 'accounts:register' %}" class="nav-link nav-link--cta">Register</a>
+                <button type="button" id="theme-toggle" class="nav-link nav-link--button"
+                        aria-pressed="false" title="Toggle dark mode">
+                    <span class="theme-toggle__label" aria-hidden="true">Dark</span>
+                </button>
+            {% endif %}
+        </nav>
+    </header>
+
+    <main class="page">
+        {% if messages %}
+            <div class="messages" role="status" aria-live="polite">
+                {% for message in messages %}
+                    <div class="message message--{{ message.tags }}">{{ message }}</div>
+                {% endfor %}
+            </div>
+        {% endif %}
+        {% block content %}{% endblock %}
+    </main>
+    {% endblock %}
+
+    <script src="{% static 'js/theme.js' %}" defer></script>
+    <script src="{% static 'js/boot.js' %}" defer></script>
+    {% block extra_js %}{% endblock %}
+</body>
+</html>

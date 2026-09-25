@@ -1,0 +1,104 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Chats — NEXLINK{% endblock %}
+{% block body_class %}chat-body{% endblock %}
+
+{% block body %}
+<div class="chat-app" id="chat-app"
+     data-current-user-id="{{ user.id }}"
+     data-current-username="{{ user.username }}">
+
+    <aside class="sidebar" id="sidebar">
+        <header class="sidebar__header">
+            <a class="sidebar__profile" href="{% url 'accounts:profile' %}" title="Your profile">
+                <div class="avatar avatar--sm">
+                    {% if user.profile.picture %}
+                        <img src="{% url 'accounts:avatar' user.id %}" alt="">
+                    {% else %}
+                        <span class="avatar__initials">{{ user.get_display_name|slice:":2"|upper }}</span>
+                    {% endif %}
+                </div>
+                <span class="sidebar__profile-name">{{ user.get_display_name }}</span>
+            </a>
+            <input type="search" id="conv-search" class="sidebar__search" placeholder="Enter phone, email, or name…" aria-label="Search by phone number, email, or name">
+            <button type="button" class="icon-btn" id="new-chat-btn" title="New chat" aria-label="New chat">＋</button>
+            <button type="button" class="icon-btn" id="new-group-btn" title="Create group" aria-label="Create group">◎</button>
+        </header>
+
+        <div class="sidebar__section" id="search-results" hidden>
+            <h2 class="sidebar__section-title">Users</h2>
+            <ul class="conv-list" id="user-results"></ul>
+        </div>
+
+        <div class="sidebar__section sidebar__section--grow">
+            <h2 class="sidebar__section-title">Conversations</h2>
+            <ul class="conv-list" id="conversation-list"></ul>
+            <div class="sidebar__empty" id="conv-empty" hidden>
+                <p>No conversations yet.</p>
+                <p class="sidebar__empty-hint">Search for a user above to start chatting.</p>
+            </div>
+        </div>
+
+        <footer class="sidebar__footer">
+            <button type="button" id="theme-toggle" class="sidebar__footer-link sidebar__footer-link--button"
+                    aria-pressed="false" title="Toggle dark mode">
+                <span class="theme-toggle__label" aria-hidden="true">Dark</span>
+            </button>
+            <a href="{% url 'accounts:settings' %}" class="sidebar__footer-link">⚙ Settings</a>
+            <form method="post" action="{% url 'accounts:logout' %}" class="inline-form">
+                {% csrf_token %}
+                <button type="submit" class="sidebar__footer-link sidebar__footer-link--button">Log out</button>
+            </form>
+        </footer>
+    </aside>
+
+    <section class="chat" id="chat-pane">
+        <div class="chat__placeholder">
+            <div class="chat__placeholder-icon" aria-hidden="true">💬</div>
+            <h2>Select a conversation</h2>
+            <p>Pick a chat on the left or start a new one.</p>
+        </div>
+    </section>
+
+    <div class="mobile-overlay" id="mobile-overlay" hidden></div>
+</div>
+
+<div class="modal-backdrop" id="group-modal" hidden>
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="group-modal-title">
+        <header class="modal__header">
+            <h2 class="modal__title" id="group-modal-title">New group</h2>
+            <button type="button" class="icon-btn" id="group-modal-close" aria-label="Close">✕</button>
+        </header>
+        <div class="modal__body">
+            <input type="text" id="group-name-input" class="modal__input"
+                   placeholder="Group name" maxlength="100" aria-label="Group name">
+            <input type="search" id="group-people-search" class="modal__input"
+                   placeholder="Search people you've chatted with…" aria-label="Filter people">
+            <p class="modal__hint" id="group-selected-count">Pick people to add</p>
+            <ul class="group-people" id="group-people-list"></ul>
+            <p class="sidebar__empty" id="group-people-empty" hidden>
+                No chats yet — start a conversation first, then you can add people here.
+            </p>
+        </div>
+        <footer class="modal__footer">
+            <button type="button" class="btn btn--ghost" id="group-cancel-btn">Cancel</button>
+            <button type="button" class="btn btn--primary" id="group-create-btn" disabled>Create group</button>
+        </footer>
+    </div>
+</div>
+
+<div class="toast-stack" id="toast-stack" aria-live="polite"></div>
+{% endblock %}
+
+{% block extra_css %}
+    <link rel="stylesheet" href="{% static 'css/chat.css' %}?v=3">
+{% endblock %}
+
+{% block extra_js %}
+    <script>window.NEXLINK = { currentUserId: {{ user.id }} };</script>
+    <script src="{% static 'js/theme.js' %}" defer></script>
+    <script src="{% static 'js/api.js' %}" defer></script>
+    <script src="{% static 'js/socket.js' %}" defer></script>
+    <script src="{% static 'js/chat.js' %}" defer></script>
+{% endblock %}

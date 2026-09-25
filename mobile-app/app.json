@@ -1,0 +1,35 @@
+{
+  "expo": {
+    "name": "NEXLINK Mobile",
+    "slug": "nexlink-mobile",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#071d22",
+      "imageWidth": 180
+    },
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "package": "com.nexlink.mobile",
+      "splash": {
+        "image": "./assets/splash-icon.png",
+        "resizeMode": "contain",
+        "backgroundColor": "#071d22",
+        "imageWidth": 180
+      },
+      "adaptiveIcon": {
+        "backgroundColor": "#E8EDFF",
+        "foregroundImage": "./assets/icon.png"
+      }
+    },
+    "web": {
+      "favicon": "./assets/icon.png"
+    }
+  }
+}

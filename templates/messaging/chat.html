@@ -1,0 +1,159 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Chat — NEXLINK{% endblock %}
+{% block body_class %}chat-body{% endblock %}
+
+{% block body %}
+<div class="chat-app chat-app--active" id="chat-app"
+     data-current-user-id="{{ user.id }}"
+     data-current-username="{{ user.username }}"
+     data-conversation-id="{{ active_conversation.id }}">
+
+    <aside class="sidebar" id="sidebar">
+        <header class="sidebar__header">
+            <button type="button" class="icon-btn sidebar__back" id="mobile-back" aria-label="Back to conversations">←</button>
+            <a class="sidebar__profile" href="{% url 'accounts:profile' %}" title="Your profile">
+                <div class="avatar avatar--sm">
+                    {% if user.profile.picture %}
+                        <img src="{% url 'accounts:avatar' user.id %}" alt="">
+                    {% else %}
+                        <span class="avatar__initials">{{ user.get_display_name|slice:":2"|upper }}</span>
+                    {% endif %}
+                </div>
+                <span class="sidebar__profile-name">{{ user.get_display_name }}</span>
+            </a>
+            <input type="search" id="conv-search" class="sidebar__search" placeholder="Enter phone, email, or name…" aria-label="Search by phone number, email, or name">
+            <button type="button" class="icon-btn" id="new-chat-btn" title="New chat" aria-label="New chat">＋</button>
+            <button type="button" class="icon-btn" id="new-group-btn" title="Create group" aria-label="Create group">◎</button>
+        </header>
+
+        <div class="sidebar__section" id="search-results" hidden>
+            <h2 class="sidebar__section-title">Users</h2>
+            <ul class="conv-list" id="user-results"></ul>
+        </div>
+
+        <div class="sidebar__section sidebar__section--grow">
+            <h2 class="sidebar__section-title">Conversations</h2>
+            <ul class="conv-list" id="conversation-list"></ul>
+            <div class="sidebar__empty" id="conv-empty" hidden>
+                <p>No conversations yet.</p>
+                <p class="sidebar__empty-hint">Search for a user above to start chatting.</p>
+            </div>
+        </div>
+
+        <footer class="sidebar__footer">
+            <button type="button" id="theme-toggle" class="sidebar__footer-link sidebar__footer-link--button"
+                    aria-pressed="false" title="Toggle dark mode">
+                <span class="theme-toggle__label" aria-hidden="true">Dark</span>
+            </button>
+            <a href="{% url 'accounts:settings' %}" class="sidebar__footer-link">⚙ Settings</a>
+            <form method="post" action="{% url 'accounts:logout' %}" class="inline-form">
+                {% csrf_token %}
+                <button type="submit" class="sidebar__footer-link sidebar__footer-link--button">Log out</button>
+            </form>
+        </footer>
+    </aside>
+
+    <section class="chat chat--open" id="chat-pane" data-conversation-id="{{ active_conversation.id }}">
+        <header class="chat__header">
+            <button type="button" class="icon-btn chat__back" id="chat-back" aria-label="Back to conversations">←</button>
+            <div class="avatar avatar--md" id="chat-peer-avatar">
+                <span class="avatar__initials">··</span>
+            </div>
+            <div class="chat__peer">
+                <h1 class="chat__peer-name" id="chat-peer-name">Loading…</h1>
+                <p class="chat__peer-status" id="chat-peer-status"></p>
+            </div>
+            <p class="chat__typing" id="typing-indicator" aria-live="polite" hidden>
+                <span class="typing-dots" aria-hidden="true"><i></i><i></i><i></i></span>
+                typing…
+            </p>
+        </header>
+
+        <div class="chat__messages" id="messages" role="log" aria-live="polite">
+            <div class="chat__empty" id="chat-empty" hidden>
+                <div class="chat__empty-icon" aria-hidden="true">👋</div>
+                <p>No messages yet. Say hello!</p>
+            </div>
+        </div>
+
+        <div class="reply-preview" id="reply-preview" hidden>
+            <div class="reply-preview__body">
+                <span class="reply-preview__label">Replying to <b id="reply-preview-name"></b></span>
+                <p class="reply-preview__text" id="reply-preview-text"></p>
+            </div>
+            <button type="button" class="icon-btn" id="reply-cancel" aria-label="Cancel reply">✕</button>
+        </div>
+
+        <form class="composer" id="composer" aria-label="Message composer">
+             <input type="file" id="attachment-input" class="composer__file" hidden
+                 accept="image/*,video/*,audio/*,.pdf,.txt,.doc,.docx,.xls,.xlsx,.zip">
+             <button type="button" class="icon-btn composer__attach" id="attachment-button"
+                  aria-label="Attach a file" title="Attach a file">＋</button>
+            <textarea id="message-input" class="composer__input" rows="1"
+                      placeholder="Write a message…" maxlength="4000"
+                      aria-label="Message"></textarea>
+            <button type="submit" class="composer__send" aria-label="Send message">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <path d="M3 11.5L21 3l-8.5 18-2.6-7.9L3 11.5z"
+                          stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
+                </svg>
+            </button>
+        </form>
+    </section>
+
+    <div class="mobile-overlay" id="mobile-overlay" hidden></div>
+</div>
+
+<div class="modal-backdrop" id="group-modal" hidden>
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="group-modal-title">
+        <header class="modal__header">
+            <h2 class="modal__title" id="group-modal-title">New group</h2>
+            <button type="button" class="icon-btn" id="group-modal-close" aria-label="Close">✕</button>
+        </header>
+        <div class="modal__body">
+            <input type="text" id="group-name-input" class="modal__input"
+                   placeholder="Group name" maxlength="100" aria-label="Group name">
+            <input type="search" id="group-people-search" class="modal__input"
+                   placeholder="Search people you've chatted with…" aria-label="Filter people">
+            <p class="modal__hint" id="group-selected-count">Pick people to add</p>
+            <ul class="group-people" id="group-people-list"></ul>
+            <p class="sidebar__empty" id="group-people-empty" hidden>
+                No chats yet — start a conversation first, then you can add people here.
+            </p>
+        </div>
+        <footer class="modal__footer">
+            <button type="button" class="btn btn--ghost" id="group-cancel-btn">Cancel</button>
+            <button type="button" class="btn btn--primary" id="group-create-btn" disabled>Create group</button>
+        </footer>
+    </div>
+</div>
+
+<div class="toast-stack" id="toast-stack" aria-live="polite"></div>
+
+<template id="reaction-menu-template">
+    <div class="reaction-menu" role="menu">
+        <button type="button" data-emoji="👍" role="menuitem">👍</button>
+        <button type="button" data-emoji="❤️" role="menuitem">❤️</button>
+        <button type="button" data-emoji="😂" role="menuitem">😂</button>
+        <button type="button" data-emoji="😮" role="menuitem">😮</button>
+        <button type="button" data-emoji="😢" role="menuitem">😢</button>
+    </div>
+</template>
+{% endblock %}
+
+{% block extra_css %}
+    <link rel="stylesheet" href="{% static 'css/chat.css' %}?v=2">
+{% endblock %}
+
+{% block extra_js %}
+    <script>window.NEXLINK = {
+        currentUserId: {{ user.id }},
+        conversationId: {{ active_conversation.id }},
+    };</script>
+    <script src="{% static 'js/theme.js' %}" defer></script>
+    <script src="{% static 'js/api.js' %}" defer></script>
+    <script src="{% static 'js/socket.js' %}" defer></script>
+    <script src="{% static 'js/chat.js' %}" defer></script>
+{% endblock %}

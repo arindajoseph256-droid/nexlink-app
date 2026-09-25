@@ -1,0 +1,111 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Log in — NEXLINK{% endblock %}
+{% block body_class %}auth-body{% endblock %}
+
+{% block body %}
+<div class="auth-shell auth-shell--welcome">
+    <section class="welcome-panel" aria-labelledby="welcome-title">
+        <div class="welcome-panel__topline">
+            <span class="welcome-panel__mark"><img src="{% static 'images/icon.png' %}" alt=""></span>
+            <span>NEXLINK</span>
+        </div>
+        <div class="welcome-panel__content">
+            <p class="welcome-panel__eyebrow">Your people, in one place</p>
+            <h1 id="welcome-title">Make room for<br><em>better conversations.</em></h1>
+            <p class="welcome-panel__lead">A calmer way to stay close, share the moment, and keep every important thread within reach.</p>
+            <div class="welcome-panel__signal">
+                <span class="welcome-panel__signal-dot"></span>
+                <span>Private by design</span>
+                <span class="welcome-panel__signal-line"></span>
+                <span>Realtime when it matters</span>
+            </div>
+        </div>
+        <div class="welcome-panel__visual" aria-hidden="true">
+            <div class="welcome-panel__halo"></div>
+            <img src="{% static 'images/icon.png' %}" alt="">
+            <span class="welcome-panel__orbit welcome-panel__orbit--one"></span>
+            <span class="welcome-panel__orbit welcome-panel__orbit--two"></span>
+        </div>
+        <p class="welcome-panel__footer">NEXLINK / 2026</p>
+    </section>
+
+    <section class="auth-card auth-card--compact" aria-labelledby="login-heading">
+        <div class="auth-card__brand" aria-label="NEXLINK">
+            <span class="auth-card__logo">◈</span>
+            <span>NEXLINK</span>
+        </div>
+
+        <h1 id="login-heading">Welcome back</h1>
+        <p class="auth-card__subtitle">Sign in to continue your conversations.</p>
+
+        {% if form.non_field_errors %}
+            <div class="form-alert form-alert--error" role="alert">
+                {% for error in form.non_field_errors %}{{ error }}{% endfor %}
+            </div>
+        {% endif %}
+
+        <form method="post" novalidate id="login-form" class="auth-form">
+            {% csrf_token %}
+
+            <div class="field {% if form.username.errors %}field--invalid{% endif %}">
+                <label class="field__label" for="id_username">Phone number or email</label>
+                <input type="text" name="{{ form.username.html_name }}" id="id_username"
+                       class="field__input" value="{{ form.username.value|default:'' }}"
+                       autocomplete="username" placeholder="+256 700 000 000 or you@example.com"
+                       autofocus>
+                {% for error in form.username.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
+            </div>
+
+            <div class="field {% if form.password.errors %}field--invalid{% endif %}">
+                <label class="field__label" for="id_password">Password</label>
+                <div class="field__password">
+                    <input
+                        type="password"
+                        name="{{ form.password.html_name }}"
+                        id="id_password"
+                        class="field__input"
+                        autocomplete="current-password"
+                        placeholder="Enter your password"
+                        required
+                    >
+                    <button type="button" class="password-toggle" data-toggle-password="id_password"
+                            aria-label="Show password" aria-pressed="false">
+                        <span class="password-toggle__icon" aria-hidden="true">👁</span>
+                    </button>
+                </div>
+                {% for error in form.password.errors %}
+                    <p class="field__error">{{ error }}</p>
+                {% endfor %}
+            </div>
+
+            <div class="auth-form__row auth-form__row--stacked">
+                <label class="checkbox">
+                    <input type="checkbox" name="remember_me" class="checkbox-input">
+                    <span class="checkbox__box" aria-hidden="true"></span>
+                    Remember me
+                </label>
+                <a class="auth-form__link" href="{% url 'accounts:password_reset' %}">Forgot password?</a>
+            </div>
+
+            <button type="submit" class="btn btn--primary btn--block" data-loading-label="Signing in…">
+                <span class="btn__label">Sign in</span>
+                <span class="btn__spinner" aria-hidden="true"></span>
+            </button>
+        </form>
+
+        <p class="auth-card__footer">
+            New to NEXLINK? <a href="{% url 'accounts:register' %}">Create an account</a>
+        </p>
+    </section>
+</div>
+{% endblock %}
+
+{% block extra_css %}
+    <link rel="stylesheet" href="{% static 'css/auth.css' %}">
+{% endblock %}
+
+{% block extra_js %}
+    <script src="{% static 'js/auth.js' %}" defer></script>
+{% endblock %}

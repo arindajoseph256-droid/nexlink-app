@@ -1,0 +1,63 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Profile — NEXLINK{% endblock %}
+
+{% block content %}
+<section class="panel panel--narrow">
+    <header class="panel__header">
+        <h1 class="panel__title">Your profile</h1>
+        <a class="btn btn--secondary" href="{% url 'accounts:settings' %}">Edit profile</a>
+    </header>
+
+    <div class="profile-card">
+        <div class="avatar avatar--xl">
+            {% if profile.picture %}
+                <img src="{% url 'accounts:avatar' user.id %}" alt="Avatar of {{ user.get_display_name }}">
+            {% else %}
+                <span class="avatar__initials">{{ user.get_display_name|slice:":2"|upper }}</span>
+            {% endif %}
+            <span class="presence-dot presence-dot--{% if profile.is_online %}online{% else %}offline{% endif %}"
+                  aria-hidden="true"></span>
+        </div>
+
+        <div class="profile-card__info">
+            <h2 class="profile-card__name">{{ user.get_display_name }}</h2>
+            <p class="profile-card__phone">{{ user.masked_phone }}</p>
+            {% if profile.bio %}
+                <p class="profile-card__bio">{{ profile.bio }}</p>
+            {% else %}
+                <p class="profile-card__bio profile-card__bio--muted">No status yet.</p>
+            {% endif %}
+
+            <dl class="profile-card__meta">
+                <div>
+                    <dt>Phone</dt>
+                    <dd>{{ user.masked_phone }}</dd>
+                </div>
+                <div>
+                    <dt>Email</dt>
+                    <dd>{{ user.email|default:"—" }}</dd>
+                </div>
+                <div>
+                    <dt>Status</dt>
+                    <dd>
+                        {% if profile.is_online %}
+                            <span class="badge badge--online">Online</span>
+                        {% else %}
+                            <span class="badge badge--offline">Offline</span>
+                            {% if profile.last_seen %}
+                                · Last seen {{ profile.last_seen|date:"M j, Y H:i" }}
+                            {% endif %}
+                        {% endif %}
+                    </dd>
+                </div>
+                <div>
+                    <dt>Joined</dt>
+                    <dd>{{ user.date_joined|date:"M j, Y" }}</dd>
+                </div>
+            </dl>
+        </div>
+    </div>
+</section>
+{% endblock %}

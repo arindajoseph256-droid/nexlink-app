@@ -1,0 +1,172 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Create account — NEXLINK{% endblock %}
+{% block body_class %}auth-body{% endblock %}
+
+{% block body %}
+<div class="auth-shell auth-shell--welcome">
+    <section class="welcome-panel" aria-labelledby="welcome-title">
+        <div class="welcome-panel__topline">
+            <span class="welcome-panel__mark"><img src="{% static 'images/icon.png' %}" alt=""></span>
+            <span>NEXLINK</span>
+        </div>
+        <div class="welcome-panel__content">
+            <p class="welcome-panel__eyebrow">Start a new chapter</p>
+            <h1 id="welcome-title">Bring your people<br><em>closer together.</em></h1>
+            <p class="welcome-panel__lead">Create a private profile, keep every conversation in one place, and make your connections feel effortless from the very first message.</p>
+            <div class="welcome-panel__signal">
+                <span class="welcome-panel__signal-dot"></span>
+                <span>Secure by default</span>
+                <span class="welcome-panel__signal-line"></span>
+                <span>Built for real-time chat</span>
+            </div>
+        </div>
+        <div class="welcome-panel__visual" aria-hidden="true">
+            <div class="welcome-panel__halo"></div>
+            <img src="{% static 'images/icon.png' %}" alt="">
+            <span class="welcome-panel__orbit welcome-panel__orbit--one"></span>
+            <span class="welcome-panel__orbit welcome-panel__orbit--two"></span>
+        </div>
+        <p class="welcome-panel__footer">NEXLINK / 2026</p>
+    </section>
+
+    <section class="auth-card auth-card--compact" aria-labelledby="register-heading">
+        <div class="auth-card__brand" aria-label="NEXLINK">
+            <span class="auth-card__logo">◈</span>
+            <span>NEXLINK</span>
+        </div>
+
+        <h1 id="register-heading">Create your account</h1>
+        <p class="auth-card__subtitle">Set up your profile and start chatting in a few quick steps.</p>
+
+        {% if form.non_field_errors %}
+            <div class="form-alert form-alert--error" role="alert">
+                {% for error in form.non_field_errors %}{{ error }}{% endfor %}
+            </div>
+        {% endif %}
+
+        <form method="post" enctype="multipart/form-data" novalidate id="register-form" class="auth-form">
+            {% csrf_token %}
+
+            <div class="field {% if form.full_name.errors %}field--invalid{% endif %}">
+                <label class="field__label" for="id_full_name">Full name</label>
+                <input
+                    type="text"
+                    name="{{ form.full_name.html_name }}"
+                    id="id_full_name"
+                    class="field__input"
+                    value="{{ form.full_name.value|default:'' }}"
+                    autocomplete="name"
+                    placeholder="e.g. Alice Nakato"
+                    maxlength="120"
+                    required
+                    autofocus
+                >
+                {% for error in form.full_name.errors %}
+                    <p class="field__error">{{ error }}</p>
+                {% endfor %}
+            </div>
+
+            <div class="field {% if form.phone_number.errors %}field--invalid{% endif %}">
+                <label class="field__label" for="id_phone_number">Phone number</label>
+                <input
+                    type="tel"
+                    name="{{ form.phone_number.html_name }}"
+                    id="id_phone_number"
+                    class="field__input"
+                    value="{{ form.phone_number.value|default:'' }}"
+                    autocomplete="tel"
+                    inputmode="tel"
+                    placeholder="+1 555 010 1234"
+                    required
+                >
+                {% for error in form.phone_number.errors %}
+                    <p class="field__error">{{ error }}</p>
+                {% endfor %}
+            </div>
+
+            <div class="field {% if form.email.errors %}field--invalid{% endif %}">
+                <label class="field__label" for="id_email">Email address</label>
+                <input
+                    type="email"
+                    name="{{ form.email.html_name }}"
+                    id="id_email"
+                    class="field__input"
+                    value="{{ form.email.value|default:'' }}"
+                    autocomplete="email"
+                    placeholder="you@example.com"
+                    required
+                >
+                {% for error in form.email.errors %}
+                    <p class="field__error">{{ error }}</p>
+                {% endfor %}
+            </div>
+
+            <div class="field {% if form.password1.errors %}field--invalid{% endif %}">
+                <label class="field__label" for="id_password1">Password</label>
+                <div class="field__password">
+                    <input
+                        type="password"
+                        name="{{ form.password1.html_name }}"
+                        id="id_password1"
+                        class="field__input"
+                        autocomplete="new-password"
+                        placeholder="Create a strong password"
+                        required
+                    >
+                    <button type="button" class="password-toggle" data-toggle-password="id_password1"
+                            aria-label="Show password" aria-pressed="false">
+                        <span class="password-toggle__icon" aria-hidden="true">👁</span>
+                    </button>
+                </div>
+                <div class="password-meter" aria-hidden="true">
+                    <span class="password-meter__bar" data-meter-bar></span>
+                </div>
+                {% for error in form.password1.errors %}
+                    <p class="field__error">{{ error }}</p>
+                {% endfor %}
+            </div>
+
+            <div class="field {% if form.password2.errors %}field--invalid{% endif %}">
+                <label class="field__label" for="id_password2">Confirm password</label>
+                <div class="field__password">
+                    <input
+                        type="password"
+                        name="{{ form.password2.html_name }}"
+                        id="id_password2"
+                        class="field__input"
+                        autocomplete="new-password"
+                        placeholder="Repeat your password"
+                        required
+                    >
+                    <button type="button" class="password-toggle" data-toggle-password="id_password2"
+                            aria-label="Show password" aria-pressed="false">
+                        <span class="password-toggle__icon" aria-hidden="true">👁</span>
+                    </button>
+                </div>
+                {% for error in form.password2.errors %}
+                    <p class="field__error">{{ error }}</p>
+                {% endfor %}
+            </div>
+
+            <button type="submit" class="btn btn--primary btn--block" data-loading-label="Creating account…">
+                <span class="btn__label">Create account</span>
+                <span class="btn__spinner" aria-hidden="true"></span>
+            </button>
+        </form>
+
+        <p class="auth-card__footer">
+            Already have an account? <a href="{% url 'accounts:login' %}">Log in</a>
+        </p>
+    </section>
+</div>
+{% endblock %}
+
+{% block extra_css %}
+    <link rel="stylesheet" href="{% static 'css/auth.css' %}">
+{% endblock %}
+
+{% block extra_js %}
+    <script src="{% static 'js/auth.js' %}" defer></script>
+{% endblock %}

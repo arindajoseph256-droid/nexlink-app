@@ -1,0 +1,122 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Settings — NEXLINK{% endblock %}
+
+{% block content %}
+<section class="panel panel--narrow">
+    <header class="panel__header">
+        <h1 class="panel__title">Account settings</h1>
+        <a class="btn btn--secondary" href="{% url 'accounts:profile' %}">View profile</a>
+    </header>
+
+    <form method="post" enctype="multipart/form-data" novalidate class="settings-form">
+        {% csrf_token %}
+
+        {% if profile_form.non_field_errors or email_form.non_field_errors %}
+            <div class="form-alert form-alert--error" role="alert">
+                {{ profile_form.non_field_errors }}
+                {{ email_form.non_field_errors }}
+            </div>
+        {% endif %}
+
+        <div class="field">
+            <label class="field__label" for="id_picture">Profile picture</label>
+            {% if profile_form.instance.picture %}
+                <div class="settings-form__current">
+                    <img src="{% url 'accounts:avatar' user.id %}" alt="Current avatar" class="avatar avatar--md">
+                    <label class="checkbox checkbox--inline">
+                        <input type="checkbox" name="picture-clear">
+                        <span class="checkbox__box" aria-hidden="true"></span>
+                        Remove current picture
+                    </label>
+                </div>
+            {% endif %}
+            <input type="file" name="picture" id="id_picture" accept="image/*" class="field__file">
+            {% for error in profile_form.picture.errors %}
+                <p class="field__error">{{ error }}</p>
+            {% endfor %}
+        </div>
+
+        <div class="field {% if profile_form.display_name.errors %}field--invalid{% endif %}">
+            <label class="field__label" for="id_display_name">Display name</label>
+            <input
+                type="text"
+                name="{{ profile_form.display_name.html_name }}"
+                id="id_display_name"
+                class="field__input"
+                value="{{ profile_form.display_name.value|default:'' }}"
+                maxlength="50"
+                placeholder="How should others see you?"
+            >
+            {% for error in profile_form.display_name.errors %}
+                <p class="field__error">{{ error }}</p>
+            {% endfor %}
+        </div>
+
+        <div class="field {% if profile_form.bio.errors %}field--invalid{% endif %}">
+            <label class="field__label" for="id_bio">Bio / status</label>
+            <textarea
+                name="{{ profile_form.bio.html_name }}"
+                id="id_bio"
+                class="field__input field__textarea"
+                rows="3"
+                maxlength="280"
+                placeholder="A short status…"
+            >{{ profile_form.bio.value|default:'' }}</textarea>
+            {% for error in profile_form.bio.errors %}
+                <p class="field__error">{{ error }}</p>
+            {% endfor %}
+        </div>
+
+        <fieldset class="settings-privacy">
+            <legend class="field__label">Privacy</legend>
+            {% for field in profile_form %}
+                {% if field.name in 'photo_visibility,about_visibility,last_seen_visibility,online_visibility' %}
+                    <div class="field">
+                        <label class="field__label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+                        {{ field }}
+                        {% for error in field.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
+                    </div>
+                {% endif %}
+            {% endfor %}
+        </fieldset>
+
+        <div class="field {% if email_form.email.errors %}field--invalid{% endif %}">
+            <label class="field__label" for="id_email">Account email (optional)</label>
+            <input
+                type="email"
+                name="{{ email_form.email.html_name }}"
+                id="id_email"
+                class="field__input"
+                value="{{ email_form.email.value|default:'' }}"
+                autocomplete="email"
+                placeholder="you@example.com"
+            >
+            {% for error in email_form.email.errors %}
+                <p class="field__error">{{ error }}</p>
+            {% endfor %}
+        </div>
+
+        <div class="field">
+            <label class="field__label">Phone number</label>
+            <p class="field__static">{{ user.masked_phone }}</p>
+            <a class="btn btn--secondary btn--sm" href="{% url 'accounts:phone_change' %}">Change phone number</a>
+        </div>
+
+        <button type="submit" class="btn btn--primary">Save changes</button>
+    </form>
+
+    <hr class="settings-divider">
+
+    <section class="settings-security">
+        <h2 class="settings-security__title">Security</h2>
+        <p class="settings-security__hint">Use a strong password you don't use anywhere else.</p>
+        <a class="btn btn--secondary" href="{% url 'accounts:password_change' %}">Change password</a>
+    </section>
+</section>
+{% endblock %}
+
+{% block extra_js %}
+    <script src="{% static 'js/profile.js' %}" defer></script>
+{% endblock %}

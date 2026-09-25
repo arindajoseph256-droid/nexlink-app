@@ -1,0 +1,12 @@
+Django>=5.0,<7.0
+djangorestframework>=3.15
+channels>=4.0
+daphne>=4.0
+Pillow>=10.0
+phonenumbers>=8.13
+python-dotenv>=1.0
+twilio>=9.0
+channels-redis>=4.2
+psycopg[binary]>=3.2
+whitenoise>=6.9
+django-cors-headers>=4.7
