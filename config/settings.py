@@ -31,11 +31,15 @@ SECRET_KEY = os.environ.get(
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.environ.get('DJANGO_DEBUG', '1') == '1'
 
-ALLOWED_HOSTS = os.environ.get(
-    'DJANGO_ALLOWED_HOSTS',
-    'localhost,127.0.0.1,192.168.1.166',
-).split(',')
-if os.environ.get('DJANGO_DEBUG', '1') == '1':
+ALLOWED_HOSTS = [
+    host.strip()
+    for host in os.environ.get(
+        'DJANGO_ALLOWED_HOSTS',
+        'localhost,127.0.0.1,192.168.1.166',
+    ).split(',')
+    if host.strip()
+]
+if DEBUG:
     ALLOWED_HOSTS.append('*')
 
 CORS_ALLOWED_ORIGINS = [
@@ -44,6 +48,14 @@ CORS_ALLOWED_ORIGINS = [
         'CORS_ALLOWED_ORIGINS',
         'http://localhost:8081,http://127.0.0.1:8081,http://192.168.1.166:8081,'
         'http://localhost:19006,http://127.0.0.1:19006,http://192.168.1.166:19006',
+    ).split(',')
+    if origin.strip()
+]
+CORS_ALLOWED_ORIGINS = [
+    origin.strip()
+    for origin in os.environ.get(
+        'CORS_ALLOWED_ORIGINS',
+        ','.join(CORS_ALLOWED_ORIGINS),
     ).split(',')
     if origin.strip()
 ]
@@ -200,6 +212,7 @@ MEDIA_ROOT = BASE_DIR / 'media'
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # Security hardening (full effect in production when DEBUG=False)
+CSRF_TRUSTED_ORIGINS = ['http://localhost:8000', 'http://127.0.0.1:8000']
 if not DEBUG:
     SECURE_SSL_REDIRECT = True
     SESSION_COOKIE_SECURE = True
@@ -211,7 +224,16 @@ if not DEBUG:
     SECURE_REFERRER_POLICY = 'same-origin'
 else:
     # Allow plain-http localhost while keeping CSRF protections active
-    CSRF_TRUSTED_ORIGINS = ['http://localhost:8000', 'http://127.0.0.1:8000']
+    pass
+
+CSRF_TRUSTED_ORIGINS = [
+    origin.strip()
+    for origin in os.environ.get(
+        'CSRF_TRUSTED_ORIGINS',
+        ','.join(CSRF_TRUSTED_ORIGINS),
+    ).split(',')
+    if origin.strip()
+]
 
 X_FRAME_OPTIONS = 'DENY'
 SECURE_CONTENT_TYPE_NOSNIFF = True
