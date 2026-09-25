@@ -26,3 +26,6 @@ media/
 # Local email credentials
 .env
 app-password.txt
+
+# Deployment credentials and provider URLs
+links/
