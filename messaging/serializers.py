@@ -63,6 +63,8 @@ class MessageSerializer(serializers.ModelSerializer):
     reactions = serializers.SerializerMethodField()
     read_by = serializers.SerializerMethodField()
     attachment_url = serializers.SerializerMethodField()
+    starred = serializers.SerializerMethodField()
+    pinned = serializers.SerializerMethodField()
 
     class Meta:
         model = Message
@@ -71,7 +73,7 @@ class MessageSerializer(serializers.ModelSerializer):
             'attachment',
             'attachment_url', 'attachment_name', 'attachment_size', 'attachment_mime_type',
             'state', 'sent_at', 'delivered_at', 'read_at', 'is_deleted',
-            'edited_at', 'created_at', 'reactions', 'read_by',
+            'edited_at', 'created_at', 'reactions', 'read_by', 'starred', 'pinned',
         )
         read_only_fields = ('id', 'conversation', 'sender', 'state', 'is_deleted',
                             'sent_at', 'delivered_at', 'read_at', 'edited_at', 'created_at',
@@ -97,7 +99,7 @@ class MessageSerializer(serializers.ModelSerializer):
             allowed_extensions = {
                 Message.Type.IMAGE: {'.jpg', '.jpeg', '.png', '.gif', '.webp'},
                 Message.Type.VIDEO: {'.mp4', '.mov', '.webm'},
-                Message.Type.AUDIO: {'.mp3', '.wav', '.ogg', '.m4a'},
+                Message.Type.AUDIO: {'.mp3', '.wav', '.ogg', '.m4a', '.webm', '.aac'},
                 Message.Type.FILE: {'.pdf', '.txt', '.doc', '.docx', '.xls', '.xlsx', '.zip'},
             }
             if message_type not in allowed_extensions or extension not in allowed_extensions[message_type]:
@@ -154,6 +156,23 @@ class MessageSerializer(serializers.ModelSerializer):
     def get_read_by(self, obj):
         return list(obj.read_statuses.values_list('user_id', flat=True))
 
+    def _viewer_state(self, obj):
+        request = self.context.get('request')
+        if not request or not getattr(request, 'user', None) or not request.user.is_authenticated:
+            return None
+        states = getattr(obj, 'viewer_states', None)
+        if states is not None:
+            return states[0] if states else None
+        return obj.user_states.filter(user=request.user).first()
+
+    def get_starred(self, obj):
+        state = self._viewer_state(obj)
+        return bool(state and state.is_starred)
+
+    def get_pinned(self, obj):
+        state = self._viewer_state(obj)
+        return bool(state and state.is_pinned)
+
 
 class ConversationSerializer(serializers.ModelSerializer):
     """Conversation list item: participants, last message, unread count."""
@@ -161,13 +180,32 @@ class ConversationSerializer(serializers.ModelSerializer):
     participants = ParticipantSerializer(source='participants_list', many=True, read_only=True)
     last_message = serializers.SerializerMethodField()
     unread_count = serializers.SerializerMethodField()
+    pinned = serializers.SerializerMethodField()
+    muted = serializers.SerializerMethodField()
+    archived = serializers.SerializerMethodField()
 
     class Meta:
         model = Conversation
         fields = (
             'id', 'kind', 'name', 'description', 'participants', 'last_message', 'unread_count',
+            'pinned', 'muted', 'archived',
             'updated_at', 'created_at',
         )
+
+    def _viewer_participant(self, obj):
+        return getattr(obj, 'viewer_participant', None)
+
+    def get_pinned(self, obj):
+        participant = self._viewer_participant(obj)
+        return bool(participant and participant.is_pinned)
+
+    def get_muted(self, obj):
+        participant = self._viewer_participant(obj)
+        return bool(participant and participant.is_muted)
+
+    def get_archived(self, obj):
+        participant = self._viewer_participant(obj)
+        return bool(participant and participant.is_archived)
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)

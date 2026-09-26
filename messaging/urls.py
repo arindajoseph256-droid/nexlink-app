@@ -38,6 +38,11 @@ urlpatterns = [
     path('groups/<int:conversation_id>/members/', views.add_group_member, name='group_add_member'),
     path('groups/<int:conversation_id>/members/<int:user_id>/', views.remove_group_member, name='group_remove_member'),
     path('groups/<int:conversation_id>/admins/<int:user_id>/', views.promote_group_admin, name='group_promote_admin'),
+    path('conversations/<int:conversation_id>/state/', views.conversation_state, name='conversation_state'),
+    path('conversations/<int:conversation_id>/clear/', views.clear_chat, name='clear_chat'),
+    path('messages/<int:message_id>/star/', views.message_star, name='message_star'),
+    path('messages/<int:message_id>/pin/', views.message_pin, name='message_pin'),
+    path('messages/starred/', views.starred_messages, name='starred_messages'),
     path('notifications/', views.notification_list, name='notifications'),
     path('notifications/read/', views.notifications_mark_read, name='notifications_read'),
 ]

@@ -278,6 +278,132 @@ class ContactAPITests(MessagingTestBase):
         self.assertEqual(response.data['results'], [])
 
 
+class NexusStateAPITests(MessagingTestBase):
+    """Per-user conversation/message state + preferences for the Nexus UI."""
+
+    def _conversation(self):
+        response = self.client.post('/api/conversations/start/', {'user_id': self.bob.id})
+        return response.data['id']
+
+    def _message(self, conversation_id):
+        response = self.client.post(
+            f'/api/conversations/{conversation_id}/messages/', {'body': 'hello'},
+        )
+        return response.data['id']
+
+    def test_conversation_state_flags_roundtrip(self):
+        conversation_id = self._conversation()
+        response = self.client.patch(
+            f'/api/conversations/{conversation_id}/state/',
+            {'pinned': True, 'muted': True, 'archived': False},
+            format='json',
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.data['pinned'])
+        self.assertTrue(response.data['muted'])
+
+        listing = self.client.get('/api/conversations/').data
+        row = next(c for c in listing if c['id'] == conversation_id)
+        self.assertTrue(row['pinned'])
+        self.assertTrue(row['muted'])
+
+    def test_conversation_state_requires_participation(self):
+        conversation_id = self._conversation()
+        self.client.force_login(self.mallory)
+        response = self.client.patch(
+            f'/api/conversations/{conversation_id}/state/', {'pinned': True},
+        )
+        self.assertEqual(response.status_code, 403)
+
+    def test_message_star_and_pin_toggle(self):
+        conversation_id = self._conversation()
+        message_id = self._message(conversation_id)
+
+        starred = self.client.post(f'/api/messages/{message_id}/star/')
+        self.assertEqual(starred.status_code, 200)
+        self.assertTrue(starred.data['starred'])
+
+        pinned = self.client.post(f'/api/messages/{message_id}/pin/')
+        self.assertEqual(pinned.status_code, 200)
+        self.assertTrue(pinned.data['pinned'])
+
+        listing = self.client.get(
+            f'/api/conversations/{conversation_id}/messages/',
+        ).data['results']
+        row = next(m for m in listing if m['id'] == message_id)
+        self.assertTrue(row['starred'])
+        self.assertTrue(row['pinned'])
+
+        # Toggle off.
+        self.assertFalse(self.client.post(f'/api/messages/{message_id}/star/').data['starred'])
+
+    def test_clear_chat_hides_only_for_viewer(self):
+        conversation_id = self._conversation()
+        self._message(conversation_id)
+        self.client.force_login(self.bob)
+        self.client.post(
+            f'/api/conversations/{conversation_id}/messages/', {'body': 'from bob'},
+        )
+
+        # Alice clears her view of the conversation.
+        self.client.force_login(self.alice)
+        response = self.client.post(f'/api/conversations/{conversation_id}/clear/')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            self.client.get(f'/api/conversations/{conversation_id}/messages/').data['results'],
+            [],
+        )
+
+        # Bob still sees the history.
+        self.client.force_login(self.bob)
+        self.assertTrue(
+            self.client.get(f'/api/conversations/{conversation_id}/messages/').data['results'],
+        )
+
+    def test_starred_messages_endpoint(self):
+        conversation_id = self._conversation()
+        message_id = self._message(conversation_id)
+        self.client.post(f'/api/messages/{message_id}/star/')
+        response = self.client.get('/api/messages/starred/')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual([m['id'] for m in response.data['results']], [message_id])
+
+    def test_preferences_roundtrip_and_me_full(self):
+        response = self.client.patch('/api/auth/preferences/', {
+            'theme': 'light', 'accent': '#ec4899', 'status': 'dnd', 'sounds': False,
+        }, format='json')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data['theme'], 'light')
+        self.assertEqual(response.data['accent'], '#ec4899')
+        self.assertEqual(response.data['status'], 'dnd')
+        self.assertFalse(response.data['sounds'])
+
+        me = self.client.get('/api/auth/me/full/').data
+        self.assertEqual(me['preferences']['theme'], 'light')
+
+    def test_profile_patch_via_me_full(self):
+        response = self.client.patch('/api/auth/me/full/', {
+            'display_name': 'Alice N.', 'about': 'Hello there',
+        }, format='json')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data['display_name'], 'Alice N.')
+        self.assertEqual(response.data['about'], 'Hello there')
+
+
+class NexusDashboardPageTests(MessagingTestBase):
+    def test_dashboard_renders_for_signed_in_user(self):
+        response = self.client.get('/')
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'nexus.js')
+        self.assertContains(response, 'NEXUS_BOOT')
+
+    def test_dashboard_requires_authentication(self):
+        self.client.logout()
+        response = self.client.get('/')
+        self.assertEqual(response.status_code, 302)
+        self.assertIn('/accounts/login/', response.url)
+
+
 class GroupAPITests(MessagingTestBase):
     def test_admin_can_create_and_manage_group(self):
         response = self.client.post('/api/groups/', {

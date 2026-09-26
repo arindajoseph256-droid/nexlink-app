@@ -132,3 +132,46 @@ def create_profile_for_new_user(sender, instance, created, **kwargs):
     """Every user gets a Profile automatically (idempotent)."""
     if created:
         Profile.objects.get_or_create(user=instance)
+
+
+class UserPreferences(models.Model):
+    """Client settings synced per account (Nexus settings screen)."""
+
+    class PresenceStatus(models.TextChoices):
+        AVAILABLE = 'available', 'Available'
+        BUSY = 'busy', 'Busy'
+        AWAY = 'away', 'Away'
+        DND = 'dnd', 'Do not disturb'
+        INVISIBLE = 'invisible', 'Invisible'
+
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='preferences',
+    )
+    theme = models.CharField(max_length=10, default='dark')
+    accent = models.CharField(max_length=9, default='#a78bfa')
+    status = models.CharField(
+        max_length=12,
+        choices=PresenceStatus.choices,
+        default=PresenceStatus.AVAILABLE,
+    )
+    enter_to_send = models.BooleanField(default=True)
+    notifications_enabled = models.BooleanField(default=True)
+    sounds_enabled = models.BooleanField(default=True)
+    read_receipts = models.BooleanField(default=True)
+    typing_indicator = models.BooleanField(default=True)
+    last_seen_visible = models.BooleanField(default=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name_plural = 'user preferences'
+
+    def __str__(self):
+        return f'Preferences({self.user_id})'
+
+    @classmethod
+    def for_user(cls, user):
+        """Return (creating if needed) the preferences row for a user."""
+        prefs, _ = cls.objects.get_or_create(user=user)
+        return prefs

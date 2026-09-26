@@ -16,14 +16,15 @@ JavaScript.
 - CSRF protection, hashed passwords (Django's auth stack), protected pages
 
 ### Messaging (messaging app)
-- One-to-one conversations with sidebar list, last-message preview, unread counts
+- Nexus dashboard: icon rail, filter chips (All/Unread/Pinned/Groups/Archived), dark/light themes with synced accent colour
+- Per-user chat state: pin, mute, archive, hide; per-user starred/pinned messages; clear-chat for self only
 - Realtime delivery over WebSockets (Django Channels + Daphne) — no polling
-- Typing indicator, online presence, last seen
-- Send / edit / soft-delete messages, replies, emoji reactions
+- Typing indicator, online presence, last seen, synced preferences (theme/accent/toggles/status)
+- Send / edit / soft-delete messages, replies, emoji reactions, attachments (image/video/audio/file)
 - Read receipts (sent ✓ / read ✓✓) and unread badges
-- User search (by username or display name) to start new chats
+- User search by phone/email/name; contacts list; groups with admin management
 - Auto-scroll, empty states, toasts, reconnect with exponential backoff
-- Desktop two-pane layout and mobile list↔chat navigation
+- Desktop three-pane layout and mobile list↔chat navigation with bottom nav
 
 ## Quick start
 
@@ -51,7 +52,8 @@ chat in real time.
 
 ```bash
 python manage.py test accounts messaging
-# 50 tests covering auth flows, API authorization, models and WebSockets
+# 73 tests covering auth flows, API authorization, models, WebSockets,
+# per-user chat state, preferences and the dashboard page
 ```
 
 ## Project layout
@@ -59,11 +61,11 @@ python manage.py test accounts messaging
 ```
 manage.py
 config/          settings.py · urls.py · asgi.py (Channels) · wsgi.py
-accounts/        User + Profile models, auth views/forms/urls, admin
-messaging/       Conversation/Message/Reaction/Notification models,
-                 DRF views + serializers, WebSocket consumers, page views
-templates/       base.html, accounts/*, messaging/*
-static/          css/{base,auth,chat}.css · js/{api,socket,chat,auth}.js
+accounts/        User + Profile + UserPreferences models, auth, preferences/avatar API
+messaging/       Conversation/Message/MessageUserState/Notification models,
+                 DRF views + serializers, WebSocket consumers, Nexus page views
+templates/       base.html, accounts/*, messaging/dashboard.html
+static/          css/{base,auth,chat}.css · js/{api,socket,nexus,auth}.js
 media/           uploaded profile pictures (dev)
 ```
 
@@ -79,6 +81,14 @@ media/           uploaded profile pictures (dev)
 | DELETE | `/api/messages/<id>/delete/` | soft-delete own message |
 | POST   | `/api/messages/<id>/react/` | toggle emoji reaction `{emoji}` |
 | GET    | `/api/users/search/?q=` | find users to chat with |
+| PATCH  | `/api/conversations/<id>/state/` | pin/mute/archive/hide a chat (per user) |
+| POST   | `/api/conversations/<id>/clear/` | hide all messages for self only |
+| POST   | `/api/messages/<id>/star/` | toggle a star on a message |
+| POST   | `/api/messages/<id>/pin/` | toggle a pin on a message |
+| GET    | `/api/messages/starred/` | all starred messages |
+| GET/PATCH | `/api/auth/preferences/` | synced theme/accent/toggles/status |
+| GET/PATCH | `/api/auth/me/full/` | profile + preferences (PATCH updates profile) |
+| POST   | `/api/auth/avatar/` | upload profile picture |
 | GET    | `/api/notifications/` | recent notifications |
 
 ## WebSockets

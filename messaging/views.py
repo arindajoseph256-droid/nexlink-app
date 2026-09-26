@@ -16,6 +16,7 @@ from .models import (
     Conversation,
     ConversationParticipant,
     Message,
+    MessageUserState,
     MessageVisibility,
     Notification,
     Reaction,
@@ -85,6 +86,7 @@ class ConversationListView(generics.ListAPIView):
         for conversation in queryset:
             conversation.participants_list = list(conversation.participants.all())
             conversation.last_message_cached = messages.get(conversation.last_message_id_annot)
+            conversation.viewer_participant = viewer_participants.get(conversation.pk)
             data.append(conversation)
         serializer = self.get_serializer(data, many=True)
         return Response(serializer.data)
@@ -123,6 +125,7 @@ class ConversationCreateView(generics.CreateAPIView):
         )
         conversation.last_message_cached = None
 
+        conversation.viewer_participant = participant
         serializer = ConversationSerializer(conversation, context={'request': request})
         return Response(serializer.data, status=status.HTTP_201_CREATED if created else 200)
 
@@ -154,12 +157,24 @@ class MessageListCreateView(generics.ListCreateAPIView):
         return conversation
 
     def get_base_queryset(self, conversation):
+        from django.db.models import Prefetch
+
+        from .models import MessageUserState
+
         return (
             Message.objects
             .filter(conversation=conversation)
             .exclude(hidden_for__user=self.request.user)
             .select_related('sender__profile', 'reply_to__sender')
-            .prefetch_related('reactions__user', 'read_statuses')
+            .prefetch_related(
+                'reactions__user',
+                'read_statuses',
+                Prefetch(
+                    'user_states',
+                    queryset=MessageUserState.objects.filter(user=self.request.user),
+                    to_attr='viewer_states',
+                ),
+            )
         )
 
     def list(self, request, *args, **kwargs):
@@ -813,3 +828,90 @@ def promote_group_admin(request, conversation_id, user_id):
     target.is_admin = True
     target.save(update_fields=['is_admin'])
     return Response(_group_payload(conversation))
+
+
+# ---------- Per-user conversation & message state (Nexus dashboard) ----------
+
+
+def _participant_or_403(conversation_id, request):
+    conversation = get_object_or_404(Conversation, pk=conversation_id)
+    participant = conversation.participant_for(request.user)
+    if not participant:
+        return None, None, Response({'detail': 'Forbidden.'}, status=status.HTTP_403_FORBIDDEN)
+    return conversation, participant, None
+
+
+@api_view(['PATCH'])
+@permission_classes([permissions.IsAuthenticated])
+def conversation_state(request, conversation_id):
+    """Toggle the viewer's pinned/muted/archived/hidden flags on a chat."""
+    conversation, participant, error = _participant_or_403(conversation_id, request)
+    if error:
+        return error
+    allowed = {'is_pinned': 'pinned', 'is_muted': 'muted',
+               'is_archived': 'archived', 'is_hidden': 'hidden'}
+    changes = {}
+    for field, name in allowed.items():
+        if name in request.data:
+            value = bool(request.data[name])
+            setattr(participant, field, value)
+            changes[field] = value
+    if not changes:
+        return Response({'detail': 'Nothing to update.'}, status=status.HTTP_400_BAD_REQUEST)
+    participant.save(update_fields=list(changes.keys()))
+    return Response({'status': 'ok', 'conversation': conversation.pk,
+                     **{allowed[field]: value for field, value in changes.items()}})
+
+
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+def clear_chat(request, conversation_id):
+    """Hide every message for the viewer only (their view is empty)."""
+    conversation, participant, error = _participant_or_403(conversation_id, request)
+    if error:
+        return error
+    MessageVisibility.objects.bulk_create([
+        MessageVisibility(message=message, user=request.user)
+        for message in conversation.messages.exclude(hidden_for__user=request.user)
+    ], ignore_conflicts=True)
+    return Response({'status': 'ok', 'conversation': conversation.pk})
+
+
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+def message_star(request, message_id):
+    """Toggle the viewer's star on a message."""
+    message = get_object_or_404(Message, pk=message_id)
+    if not message.conversation.is_participant(request.user):
+        return Response({'detail': 'Forbidden.'}, status=status.HTTP_403_FORBIDDEN)
+    state, _ = MessageUserState.objects.get_or_create(message=message, user=request.user)
+    state.is_starred = not state.is_starred
+    state.save(update_fields=['is_starred', 'updated_at'])
+    return Response({'status': 'ok', 'starred': state.is_starred})
+
+
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+def message_pin(request, message_id):
+    """Toggle the viewer's pin on a message (pinned banner shows the latest)."""
+    message = get_object_or_404(Message, pk=message_id)
+    if not message.conversation.is_participant(request.user):
+        return Response({'detail': 'Forbidden.'}, status=status.HTTP_403_FORBIDDEN)
+    state, _ = MessageUserState.objects.get_or_create(message=message, user=request.user)
+    state.is_pinned = not state.is_pinned
+    state.save(update_fields=['is_pinned', 'updated_at'])
+    return Response({'status': 'ok', 'pinned': state.is_pinned})
+
+
+@api_view(['GET'])
+@permission_classes([permissions.IsAuthenticated])
+def starred_messages(request):
+    """Messages the viewer starred across all conversations."""
+    states = MessageUserState.objects.filter(
+        user=request.user, is_starred=True,
+        message__conversation__participants__user=request.user,
+    ).select_related('message__sender__profile', 'message__conversation').order_by('-updated_at')
+    serializer = MessageSerializer(
+        [s.message for s in states], many=True, context={'request': request},
+    )
+    return Response({'results': serializer.data})

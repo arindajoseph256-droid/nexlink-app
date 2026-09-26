@@ -141,6 +141,18 @@ class ConversationParticipant(models.Model):
         default=False,
         help_text='User hid the conversation from their list (or left a DM).',
     )
+    is_pinned = models.BooleanField(
+        default=False,
+        help_text='User pinned this conversation to the top of their list.',
+    )
+    is_muted = models.BooleanField(
+        default=False,
+        help_text='User muted notifications for this conversation.',
+    )
+    is_archived = models.BooleanField(
+        default=False,
+        help_text='User archived this conversation.',
+    )
     last_read_message = models.ForeignKey(
         'Message',
         null=True,
@@ -158,6 +170,7 @@ class ConversationParticipant(models.Model):
         ]
         indexes = [
             models.Index(fields=['user', 'is_hidden']),
+            models.Index(fields=['user', 'is_archived']),
             models.Index(fields=['conversation', 'user']),
         ]
 
@@ -283,7 +296,6 @@ class Message(models.Model):
 
 class MessageReadStatus(models.Model):
     """Read receipt: which user read which message."""
-
     message = models.ForeignKey(
         Message,
         on_delete=models.CASCADE,
@@ -309,6 +321,39 @@ class MessageReadStatus(models.Model):
 
     def __str__(self):
         return f'{self.user} read message #{self.message_id}'
+
+
+class MessageUserState(models.Model):
+    """Per-user flags on a message: starred / pinned by that viewer."""
+
+    message = models.ForeignKey(
+        Message,
+        on_delete=models.CASCADE,
+        related_name='user_states',
+    )
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='message_states',
+    )
+    is_starred = models.BooleanField(default=False)
+    is_pinned = models.BooleanField(default=False)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=['message', 'user'],
+                name='unique_message_user_state',
+            ),
+        ]
+        indexes = [
+            models.Index(fields=['user', 'is_starred']),
+            models.Index(fields=['message', 'user']),
+        ]
+
+    def __str__(self):
+        return f'State(user={self.user_id}, message={self.message_id})'
 
 
 class MessageVisibility(models.Model):
