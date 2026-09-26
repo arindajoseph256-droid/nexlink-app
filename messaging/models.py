@@ -516,14 +516,87 @@ class BlockedUser(models.Model):
 class UserReport(models.Model):
     """Private abuse report, retained for moderation workflows."""
 
+    class Reason(models.TextChoices):
+        SPAM = 'spam', 'Spam'
+        HARASSMENT = 'harassment', 'Harassment'
+        IMPERSONATION = 'impersonation', 'Impersonation'
+        INAPPROPRIATE = 'inappropriate', 'Inappropriate content'
+        OTHER = 'other', 'Other'
+
     reporter = models.ForeignKey(
         User, on_delete=models.CASCADE, related_name='submitted_reports',
     )
     reported = models.ForeignKey(
         User, on_delete=models.CASCADE, related_name='received_reports',
     )
-    reason = models.CharField(max_length=500)
+    reason = models.CharField(max_length=20, choices=Reason.choices)
+    details = models.CharField(max_length=500, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         indexes = [models.Index(fields=['reported', '-created_at'])]
+
+
+class Call(models.Model):
+    """A 1:1 voice or video call inside a direct conversation.
+
+    Media flows peer-to-peer over WebRTC; this row tracks ring state and
+    history. Signaling (SDP offers/answers, ICE candidates) is relayed
+    through the conversation socket, never stored.
+    """
+
+    class Type(models.TextChoices):
+        VOICE = 'voice', 'Voice'
+        VIDEO = 'video', 'Video'
+
+    class Status(models.TextChoices):
+        RINGING = 'ringing', 'Ringing'
+        ACTIVE = 'active', 'Active'
+        ENDED = 'ended', 'Ended'
+        MISSED = 'missed', 'Missed'
+        DECLINED = 'declined', 'Declined'
+
+    conversation = models.ForeignKey(
+        Conversation, on_delete=models.CASCADE, related_name='calls',
+    )
+    initiator = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name='calls_started',
+    )
+    callee = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name='calls_received',
+    )
+    kind = models.CharField(max_length=5, choices=Type.choices, default=Type.VOICE)
+    status = models.CharField(
+        max_length=8, choices=Status.choices, default=Status.RINGING, db_index=True,
+    )
+    started_at = models.DateTimeField(auto_now_add=True)
+    answered_at = models.DateTimeField(null=True, blank=True)
+    ended_at = models.DateTimeField(null=True, blank=True)
+    duration_seconds = models.PositiveIntegerField(null=True, blank=True)
+
+    class Meta:
+        ordering = ['-started_at']
+        indexes = [
+            models.Index(fields=['-started_at']),
+            models.Index(fields=['initiator', '-started_at']),
+            models.Index(fields=['callee', '-started_at']),
+        ]
+
+    def __str__(self):
+        return f'{self.get_kind_display()} call #{self.pk} ({self.status})'
+
+    @property
+    def peer_for(self, user):
+        """Return the other participant for the given user."""
+        return self.callee if self.initiator_id == user.pk else self.initiator
+
+    def finish(self, status, ended_at=None):
+        """Close the call with a terminal status and computed duration."""
+        from django.utils import timezone
+
+        now = ended_at or timezone.now()
+        self.status = status
+        self.ended_at = now
+        if self.answered_at:
+            self.duration_seconds = max(0, int((now - self.answered_at).total_seconds()))
+        self.save(update_fields=['status', 'ended_at', 'duration_seconds'])

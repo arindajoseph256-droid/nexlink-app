@@ -42,6 +42,17 @@ class NotificationConsumer(AsyncJsonWebsocketConsumer):
     async def notification_event(self, event):
         await self.send(text_data=json.dumps(event))
 
+    async def call_incoming(self, event):
+        # The caller must not hear their own ring.
+        if event.get('caller_id') != self.user.id:
+            await self.send(text_data=json.dumps(event))
+
+    async def call_accepted(self, event):
+        await self.send(text_data=json.dumps(event))
+
+    async def call_ended(self, event):
+        await self.send(text_data=json.dumps(event))
+
     @database_sync_to_async
     def set_presence_online(self):
         from accounts.models import Profile
@@ -171,6 +182,21 @@ class ChatConsumer(AsyncJsonWebsocketConsumer):
     async def notification_event(self, event):
         await self.send(text_data=json.dumps(event))
 
+    async def call_incoming(self, event):
+        if event.get('caller_id') != self.user.id:
+            await self.send(text_data=json.dumps(event))
+
+    async def call_accepted(self, event):
+        await self.send(text_data=json.dumps(event))
+
+    async def call_ended(self, event):
+        await self.send(text_data=json.dumps(event))
+
+    async def call_signal(self, event):
+        # WebRTC SDP/ICE is only useful to the peer, not the sender.
+        if event.get('from_id') != self.user.id:
+            await self.send(text_data=json.dumps(event))
+
     # ---------- Database helpers ----------
 
     @database_sync_to_async
@@ -205,6 +231,21 @@ class ChatConsumer(AsyncJsonWebsocketConsumer):
 
 
 # ---------- Helpers used by REST views to fan out events ----------
+
+def notify_call_event(call, event, extra=None):
+    """Fan a call event to the conversation room and each user's personal room.
+
+    The conversation room serves the peer with the chat pane open; the user
+    rooms make rings/ends arrive even when no chat socket is connected.
+    """
+    payload = dict(extra or {})
+    _group_send_sync(f'chat-{call.conversation_id}', {'type': event, **payload})
+    for user_id in (call.initiator_id, call.callee_id):
+        _group_send_sync(
+            USER_ROOM.format(user_id=user_id),
+            {'type': event, **payload},
+        )
+
 
 def _group_send_sync(group, event):
     """Fire a channel-layer event from sync code (best-effort)."""

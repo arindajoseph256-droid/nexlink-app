@@ -43,6 +43,13 @@ urlpatterns = [
     path('messages/<int:message_id>/star/', views.message_star, name='message_star'),
     path('messages/<int:message_id>/pin/', views.message_pin, name='message_pin'),
     path('messages/starred/', views.starred_messages, name='starred_messages'),
+    path('calls/', views.call_history, name='call_history'),
+    path('calls/<int:call_id>/answer/', views.call_answer, name='call_answer'),
+    path('calls/<int:call_id>/decline/', views.call_decline, name='call_decline'),
+    path('calls/<int:call_id>/end/', views.call_end, name='call_end'),
+    path('calls/<int:call_id>/signal/', views.call_signal, name='call_signal'),
+    path('conversations/<int:conversation_id>/calls/', views.call_start, name='call_start'),
+    path('conversations/<int:conversation_id>/media/', views.conversation_media, name='conversation_media'),
     path('notifications/', views.notification_list, name='notifications'),
     path('notifications/read/', views.notifications_mark_read, name='notifications_read'),
 ]

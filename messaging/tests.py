@@ -9,7 +9,9 @@ from django.test import TestCase, TransactionTestCase
 from rest_framework.test import APIClient
 
 from . import consumers
-from .models import BlockedUser, Contact, Conversation, Message, Notification, Reaction
+from .models import (
+    BlockedUser, Contact, Conversation, Message, Notification, Reaction, UserReport,
+)
 
 User = get_user_model()
 
@@ -388,6 +390,234 @@ class NexusStateAPITests(MessagingTestBase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data['display_name'], 'Alice N.')
         self.assertEqual(response.data['about'], 'Hello there')
+
+
+class NexusCallAPITests(MessagingTestBase):
+    """Phase 6.1: 1:1 voice/video calls with socket-relayed WebRTC signaling."""
+
+    def setUp(self):
+        super().setUp()
+        self.conversation, _ = Conversation.get_or_create_between(self.alice, self.bob)
+        self.start_url = f'/api/conversations/{self.conversation.id}/calls/'
+
+    def _start_call(self, kind='voice'):
+        response = self.client.post(self.start_url, {'kind': kind}, format='json')
+        self.assertEqual(response.status_code, 201)
+        return response.data
+
+    def test_call_start_returns_ring_payload(self):
+        payload = self._start_call('video')
+        self.assertEqual(payload['kind'], 'video')
+        self.assertEqual(payload['status'], 'ringing')
+        self.assertEqual(payload['direction'], 'outgoing')
+        self.assertEqual(payload['peer']['id'], self.bob.id)
+        self.assertIsNone(payload['duration_seconds'])
+
+    def test_call_start_defaults_to_voice(self):
+        response = self.client.post(self.start_url, {})
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.data['kind'], 'voice')
+
+    def test_call_start_invalid_kind_rejected(self):
+        response = self.client.post(self.start_url, {'kind': 'telepathy'}, format='json')
+        self.assertEqual(response.status_code, 400)
+
+    def test_call_start_blocked_users_rejected(self):
+        BlockedUser.objects.create(blocker=self.alice, blocked=self.bob)
+        response = self.client.post(self.start_url, {})
+        self.assertEqual(response.status_code, 403)
+
+    def test_call_start_non_participant_forbidden(self):
+        self.client.force_login(self.mallory)
+        response = self.client.post(self.start_url, {})
+        self.assertEqual(response.status_code, 403)
+
+    def test_call_start_group_conversation_rejected(self):
+        response = self.client.post('/api/groups/', {
+            'name': 'Team', 'user_ids': [self.bob.id, self.mallory.id],
+        }, format='json')
+        response = self.client.post(f"/api/conversations/{response.data['id']}/calls/", {})
+        self.assertEqual(response.status_code, 400)
+
+    def test_double_ring_returns_409(self):
+        self._start_call()
+        response = self.client.post(self.start_url, {})
+        self.assertEqual(response.status_code, 409)
+
+    def test_full_answer_signal_end_lifecycle(self):
+        call_id = self._start_call()['id']
+
+        # Mallory is not part of the call.
+        self.client.force_login(self.mallory)
+        self.assertEqual(self.client.post(f'/api/calls/{call_id}/answer/').status_code, 400)
+        self.assertEqual(self.client.post(f'/api/calls/{call_id}/decline/').status_code, 403)
+        self.assertEqual(self.client.post(f'/api/calls/{call_id}/end/').status_code, 403)
+        self.assertEqual(self.client.post(
+            f'/api/calls/{call_id}/signal/',
+            {'signal_type': 'ice', 'payload': {'candidate': 'x'}},
+            format='json',
+        ).status_code, 403)
+
+        # The callee answers and relays ICE back to the caller.
+        self.client.force_login(self.bob)
+        answered = self.client.post(f'/api/calls/{call_id}/answer/')
+        self.assertEqual(answered.status_code, 200)
+        self.assertEqual(answered.data['status'], 'active')
+        self.assertEqual(answered.data['direction'], 'incoming')
+
+        relayed = self.client.post(
+            f'/api/calls/{call_id}/signal/',
+            {'signal_type': 'ice', 'payload': {'candidate': 'x'}},
+            format='json',
+        )
+        self.assertEqual(relayed.status_code, 200)
+
+        # The caller ends the active call; duration is computed.
+        self.client.force_login(self.alice)
+        ended = self.client.post(f'/api/calls/{call_id}/end/')
+        self.assertEqual(ended.status_code, 200)
+        self.assertEqual(ended.data['status'], 'ended')
+        self.assertGreaterEqual(ended.data['duration_seconds'], 0)
+
+    def test_decline_marks_call_declined(self):
+        call_id = self._start_call()['id']
+        self.client.force_login(self.bob)
+        declined = self.client.post(f'/api/calls/{call_id}/decline/')
+        self.assertEqual(declined.data['status'], 'declined')
+
+    def test_end_before_answer_marks_missed(self):
+        call_id = self._start_call()['id']
+        ended = self.client.post(f'/api/calls/{call_id}/end/')
+        self.assertEqual(ended.data['status'], 'missed')
+
+    def test_cannot_answer_non_ringing_call(self):
+        call_id = self._start_call()['id']
+        self.client.force_login(self.bob)
+        self.client.post(f'/api/calls/{call_id}/decline/')
+        response = self.client.post(f'/api/calls/{call_id}/answer/')
+        self.assertEqual(response.status_code, 400)
+
+    def test_signal_requires_valid_type(self):
+        call_id = self._start_call()['id']
+        response = self.client.post(
+            f'/api/calls/{call_id}/signal/', {'signal_type': 'hijack'}, format='json',
+        )
+        self.assertEqual(response.status_code, 400)
+
+    def test_call_history_lists_calls_for_both_parties(self):
+        call_id = self._start_call()['id']
+
+        response = self.client.get('/api/calls/')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual([row['id'] for row in response.data['results']], [call_id])
+
+        self.client.force_login(self.bob)
+        row = self.client.get('/api/calls/').data['results'][0]
+        self.assertEqual(row['id'], call_id)
+        self.assertEqual(row['direction'], 'incoming')
+        self.assertEqual(row['peer']['id'], self.alice.id)
+
+
+class NexusMediaGalleryTests(MessagingTestBase):
+    """Phase 6.2: attachments + shared links surfaced in the info panel."""
+
+    def setUp(self):
+        super().setUp()
+        self.conversation, _ = Conversation.get_or_create_between(self.alice, self.bob)
+        self.media_url = f'/api/conversations/{self.conversation.id}/media/'
+
+    def test_media_returns_attachments_and_extracted_links(self):
+        Message.objects.create(
+            conversation=self.conversation, sender=self.alice,
+            message_type=Message.Type.IMAGE,
+            attachment=SimpleUploadedFile('pic.png', b'fake-bytes', content_type='image/png'),
+        )
+        Message.objects.create(
+            conversation=self.conversation, sender=self.bob,
+            body='Docs at https://example.com/page, mirror https://other.org.',
+        )
+        Message.objects.create(
+            conversation=self.conversation, sender=self.alice, body='No links here.',
+        )
+
+        response = self.client.get(self.media_url)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.data['media']), 1)
+        self.assertEqual(response.data['media'][0]['message_type'], 'image')
+        self.assertEqual(
+            [link['url'] for link in response.data['links']],
+            ['https://example.com/page', 'https://other.org'],
+        )
+        self.assertEqual(response.data['links'][0]['sender'], self.bob.get_display_name())
+
+    def test_media_excludes_deleted_and_personally_hidden_messages(self):
+        image = Message.objects.create(
+            conversation=self.conversation, sender=self.alice,
+            message_type=Message.Type.IMAGE,
+            attachment=SimpleUploadedFile('gone.png', b'x', content_type='image/png'),
+        )
+        image.soft_delete()
+        hidden = Message.objects.create(
+            conversation=self.conversation, sender=self.bob,
+            body='https://hidden.example/secret',
+        )
+        hidden.hidden_for.create(user=self.alice)
+
+        response = self.client.get(self.media_url)
+        self.assertEqual(response.data['media'], [])
+        self.assertEqual(response.data['links'], [])
+
+    def test_media_requires_participation(self):
+        self.client.force_login(self.mallory)
+        self.assertEqual(self.client.get(self.media_url).status_code, 403)
+
+
+class ReportUserTests(MessagingTestBase):
+    def test_report_validates_reason_and_auto_blocks(self):
+        response = self.client.post(
+            f'/api/users/{self.bob.id}/report/', {'reason': 'nonsense'}, format='json',
+        )
+        self.assertEqual(response.status_code, 400)
+
+        response = self.client.post(f'/api/users/{self.bob.id}/report/', {
+            'reason': 'harassment', 'details': 'Repeated abusive messages.',
+        }, format='json')
+        self.assertEqual(response.status_code, 201)
+        self.assertTrue(UserReport.objects.filter(
+            reporter=self.alice, reported=self.bob, reason='harassment',
+            details__contains='abusive',
+        ).exists())
+        # Reporting automatically blocks the reported user.
+        self.assertTrue(
+            BlockedUser.objects.filter(blocker=self.alice, blocked=self.bob).exists(),
+        )
+
+    def test_report_self_and_unknown_users_rejected(self):
+        self.assertEqual(
+            self.client.post(f'/api/users/{self.alice.id}/report/',
+                             {'reason': 'spam'}, format='json').status_code,
+            404,
+        )
+        self.assertEqual(
+            self.client.post('/api/users/999999/report/',
+                             {'reason': 'spam'}, format='json').status_code,
+            404,
+        )
+
+    def test_block_toggle_roundtrip(self):
+        self.assertEqual(
+            self.client.post(f'/api/users/{self.bob.id}/block/').data['status'], 'blocked',
+        )
+        self.assertTrue(
+            BlockedUser.objects.filter(blocker=self.alice, blocked=self.bob).exists(),
+        )
+        self.assertEqual(
+            self.client.delete(f'/api/users/{self.bob.id}/block/').data['status'],
+            'unblocked',
+        )
+        self.assertFalse(
+            BlockedUser.objects.filter(blocker=self.alice, blocked=self.bob).exists(),
+        )
 
 
 class NexusDashboardPageTests(MessagingTestBase):

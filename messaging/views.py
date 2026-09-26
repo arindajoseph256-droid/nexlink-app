@@ -12,6 +12,7 @@ from accounts.models import Profile
 
 from .models import (
     BlockedUser,
+    Call,
     Contact,
     Conversation,
     ConversationParticipant,
@@ -580,12 +581,19 @@ def block_user(request, user_id):
 @permission_classes([permissions.IsAuthenticated])
 def report_user(request, user_id):
     target = User.objects.filter(pk=user_id).exclude(pk=request.user.pk).first()
-    reason = (request.data.get('reason') or '').strip()
     if not target:
         return Response({'detail': 'User not found.'}, status=status.HTTP_404_NOT_FOUND)
-    if not reason or len(reason) > 500:
-        return Response({'detail': 'A report reason is required.'}, status=status.HTTP_400_BAD_REQUEST)
-    UserReport.objects.create(reporter=request.user, reported=target, reason=reason)
+    reason = (request.data.get('reason') or '').strip()
+    valid_reasons = {choice for choice, _ in UserReport.Reason.choices}
+    if reason not in valid_reasons:
+        return Response({'detail': 'Pick a report reason.'}, status=status.HTTP_400_BAD_REQUEST)
+    UserReport.objects.create(
+        reporter=request.user,
+        reported=target,
+        reason=reason,
+        details=(request.data.get('details') or '').strip()[:500],
+    )
+    BlockedUser.objects.get_or_create(blocker=request.user, blocked=target)
     return Response({'status': 'reported'}, status=status.HTTP_201_CREATED)
 
 
@@ -915,3 +923,192 @@ def starred_messages(request):
         [s.message for s in states], many=True, context={'request': request},
     )
     return Response({'results': serializer.data})
+
+
+# ---------- Calls (1:1, WebRTC media; signaling via the chat socket) ----------
+
+
+def _call_payload(call, viewer):
+    peer = call.callee if call.initiator_id == viewer.pk else call.initiator
+    profile = getattr(peer, 'profile', None)
+    return {
+        'id': call.id,
+        'conversation': call.conversation_id,
+        'kind': call.kind,
+        'status': call.status,
+        'direction': 'outgoing' if call.initiator_id == viewer.pk else 'incoming',
+        'peer': {
+            'id': peer.id,
+            'display_name': peer.get_display_name(),
+            'avatar_url': profile.avatar_url if profile else None,
+        },
+        'duration_seconds': call.duration_seconds,
+        'created_at': call.started_at,
+    }
+
+
+def _signal(call, event, extra=None):
+    """Relay a call event over the channel layer.
+
+    Ring/lifecycle events fan out to both user rooms too, so they arrive
+    even when the peer has no chat socket open. Signaling (SDP/ICE) stays
+    on the conversation room: both peers connect it before exchanging media.
+    """
+    from .consumers import _group_send_sync, notify_call_event
+
+    payload = {
+        'call_id': call.id,
+        'conversation_id': call.conversation_id,
+        'kind': call.kind,
+        'from_id': None,
+    }
+    payload.update(extra or {})
+    if event == 'call.signal':
+        _group_send_sync(f'chat-{call.conversation_id}', {'type': event, **payload})
+    else:
+        notify_call_event(call, event, payload)
+
+
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+def call_start(request, conversation_id):
+    conversation = get_object_or_404(Conversation, pk=conversation_id)
+    participant = conversation.participant_for(request.user)
+    if not participant:
+        return Response({'detail': 'Forbidden.'}, status=status.HTTP_403_FORBIDDEN)
+    if conversation.kind != Conversation.Kind.DM:
+        return Response({'detail': 'Calls are 1:1 only.'}, status=400)
+    peer_member = conversation.participants.exclude(user=request.user).first()
+    if not peer_member:
+        return Response({'detail': 'Calls are 1:1 only.'}, status=400)
+    if BlockedUser.objects.filter(
+        Q(blocker=request.user, blocked=peer_member.user)
+        | Q(blocked=request.user, blocker=peer_member.user),
+    ).exists():
+        return Response({'detail': 'Unavailable.'}, status=403)
+    kind = request.data.get('kind') or 'voice'
+    if kind not in (Call.Type.VOICE, Call.Type.VIDEO):
+        return Response({'detail': 'kind must be voice or video.'}, status=400)
+    active = Call.objects.filter(
+        conversation=conversation, callee=peer_member.user, status=Call.Status.RINGING,
+    ).first()
+    if active:
+        return Response({'detail': 'Already ringing.'}, status=409)
+    call = Call.objects.create(
+        conversation=conversation,
+        initiator=request.user,
+        callee=peer_member.user,
+        kind=kind,
+    )
+    _signal(call, 'call.incoming', {
+        'caller': request.user.get_display_name(),
+        'caller_id': request.user.pk,
+    })
+    return Response(_call_payload(call, request.user), status=status.HTTP_201_CREATED)
+
+
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+def call_answer(request, call_id):
+    call = get_object_or_404(Call, pk=call_id)
+    if call.callee_id != request.user.pk or call.status != Call.Status.RINGING:
+        return Response({'detail': 'Not answerable.'}, status=400)
+    from django.utils import timezone
+
+    call.status = Call.Status.ACTIVE
+    call.answered_at = timezone.now()
+    call.save(update_fields=['status', 'answered_at'])
+    _signal(call, 'call.accepted', {'answered_by': request.user.pk})
+    return Response(_call_payload(call, request.user))
+
+
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+def call_decline(request, call_id):
+    call = get_object_or_404(Call, pk=call_id)
+    if call.callee_id != request.user.pk:
+        return Response({'detail': 'Forbidden.'}, status=403)
+    if call.status == Call.Status.RINGING:
+        call.finish(Call.Status.DECLINED)
+        _signal(call, 'call.ended', {'reason': 'declined'})
+    return Response(_call_payload(call, request.user))
+
+
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+def call_end(request, call_id):
+    call = get_object_or_404(Call, pk=call_id)
+    if request.user.pk not in (call.initiator_id, call.callee_id):
+        return Response({'detail': 'Forbidden.'}, status=403)
+    if call.status in (Call.Status.RINGING, Call.Status.ACTIVE):
+        if call.status == Call.Status.RINGING:
+            call.finish(Call.Status.MISSED)
+        else:
+            call.finish(Call.Status.ENDED)
+        _signal(call, 'call.ended', {'reason': call.status})
+    return Response(_call_payload(call, request.user))
+
+
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+def call_signal(request, call_id):
+    """Relay WebRTC SDP/ICE payloads between the two callers."""
+    call = get_object_or_404(Call, pk=call_id)
+    if request.user.pk not in (call.initiator_id, call.callee_id):
+        return Response({'detail': 'Forbidden.'}, status=403)
+    signal_type = request.data.get('signal_type')
+    if signal_type not in ('offer', 'answer', 'ice'):
+        return Response({'detail': 'Invalid signal_type.'}, status=400)
+    peer_id = call.callee_id if request.user.pk == call.initiator_id else call.initiator_id
+    _signal(call, 'call.signal', {
+        'signal_type': signal_type,
+        'payload': request.data.get('payload'),
+        'to_id': peer_id,
+        'from_id': request.user.pk,
+    })
+    return Response({'status': 'ok'})
+
+
+@api_view(['GET'])
+@permission_classes([permissions.IsAuthenticated])
+def call_history(request):
+    """All calls the viewer participated in, newest first."""
+    calls = Call.objects.filter(
+        Q(initiator=request.user) | Q(callee=request.user),
+    ).select_related('initiator__profile', 'callee__profile')[:100]
+    return Response({'results': [_call_payload(call, request.user) for call in calls]})
+
+
+# ---------- Media gallery (Phase 6.2) ----------
+
+
+@api_view(['GET'])
+@permission_classes([permissions.IsAuthenticated])
+def conversation_media(request, conversation_id):
+    """Images, files and links shared in one conversation (info panel)."""
+    conversation = get_object_or_404(Conversation, pk=conversation_id)
+    if not conversation.is_participant(request.user):
+        return Response({'detail': 'Forbidden.'}, status=status.HTTP_403_FORBIDDEN)
+    messages = (
+        conversation.messages
+        .filter(is_deleted=False)
+        .exclude(hidden_for__user=request.user)
+        .select_related('sender__profile')
+        .order_by('-created_at')
+    )
+    media_rows = messages.exclude(attachment='')[:200]
+    serializer = MessageSerializer(media_rows, many=True, context={'request': request})
+
+    links = []
+    import re
+
+    pattern = re.compile(r'https?://[^\s<>"]+')
+    for message in messages.filter(body__icontains='http')[:300]:
+        for match in pattern.findall(message.body):
+            links.append({
+                'message_id': message.id,
+                'url': match.rstrip('.,;:!?)'),
+                'sender': message.sender.get_display_name(),
+                'created_at': message.created_at,
+            })
+    return Response({'media': serializer.data, 'links': links[:100]})

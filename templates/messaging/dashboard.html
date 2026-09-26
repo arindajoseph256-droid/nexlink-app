@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="{% static 'css/base.css' %}?v=6" />
+<link rel="stylesheet" href="{% static 'css/base.css' %}?v=7" />
 <style>
 /* ============================================================
    PREMIUM TOKENS — Midnight Violet / Parchment Ivory
@@ -1020,6 +1020,77 @@ svg{display:block;flex:none}
 .call-btn:hover{background:rgba(255,255,255,.22);transform:scale(1.04)}
 .call-btn svg{width:24px;height:24px}
 .call-btn.end{background:var(--danger);border-color:transparent;box-shadow:0 12px 28px -10px rgba(244,63,94,.65)}
+.call-btn.accept{background:var(--success);border-color:transparent;box-shadow:0 12px 28px -10px rgba(16,185,129,.6)}
+.call-screen .call-video{
+  position:absolute;inset:0;width:100%;height:100%;object-fit:cover;
+  z-index:1;background:#08070f;
+}
+.call-screen .call-local-video{
+  position:absolute;right:18px;bottom:120px;
+  width:180px;aspect-ratio:3/4;object-fit:cover;
+  border-radius:16px;border:1px solid rgba(255,255,255,.18);
+  box-shadow:var(--shadow-3);z-index:3;background:#08070f;
+}
+@media (max-width:600px){.call-screen .call-local-video{width:120px;bottom:104px}}
+
+.incoming-body{padding:32px 24px 26px;text-align:center}
+.incoming-body h3{font-size:19px;font-weight:600;margin-top:14px;letter-spacing:-.02em}
+.incoming-body p{font-size:13px;color:var(--text-2);margin-top:3px}
+.incoming-body .avatar{width:88px;height:88px;font-size:30px;margin:0 auto;
+  box-shadow:0 0 0 5px var(--accent-sub), 0 0 60px 0 var(--accent-glow);
+  animation:ringPulse 1.6s var(--ease) infinite;
+}
+@keyframes ringPulse{0%,100%{box-shadow:0 0 0 5px var(--accent-sub), 0 0 40px 0 var(--accent-glow)}50%{box-shadow:0 0 0 12px var(--accent-soft), 0 0 90px 0 var(--accent-glow)}}
+
+.lightbox-inner{position:relative;max-width:min(920px,94vw);max-height:88vh;display:flex}
+.lightbox-inner img{max-width:100%;max-height:88vh;border-radius:14px;box-shadow:var(--shadow-3);object-fit:contain}
+.lightbox-close{position:absolute;top:-16px;right:-16px;background:var(--bg-elevated);border:1px solid var(--border-2);box-shadow:var(--shadow-2);width:36px;height:36px}
+
+.media-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.media-grid .media-thumb{
+  position:relative;aspect-ratio:1;border-radius:10px;overflow:hidden;cursor:pointer;
+  background:var(--bg-input);display:grid;place-items:center;color:var(--text-3);
+}
+.media-grid .media-thumb img{width:100%;height:100%;object-fit:cover;display:block}
+.media-grid .media-thumb .ext{font-size:10.5px;font-weight:600;text-transform:uppercase;letter-spacing:.04em}
+.media-grid .media-thumb:hover{filter:brightness(1.12)}
+.link-row{
+  display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:10px;
+  text-decoration:none;color:var(--text-1);transition:background var(--dur);
+}
+.link-row:hover{background:var(--bg-hover)}
+.link-row svg{width:16px;height:16px;color:var(--accent);flex:none}
+.link-row .meta{min-width:0;flex:1}
+.link-row .url{font-size:13px;font-weight:450;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.link-row .sub{font-size:11.5px;color:var(--text-3);margin-top:1px}
+
+.inchat-search{display:flex;align-items:center;gap:8px;padding:8px 16px;border-bottom:1px solid var(--border-1);background:var(--bg-chat);flex:none}
+.inchat-search input{
+  flex:1;background:var(--bg-input);border:none;outline:none;border-radius:10px;
+  padding:8px 12px;font-size:13px;color:var(--text-1);font-family:inherit;
+}
+.inchat-search .count{font-size:12px;color:var(--text-2);white-space:nowrap;font-variant-numeric:tabular-nums}
+.msg-row.hit .bubble{box-shadow:0 0 0 2px var(--gold) !important}
+.msg-row.hit-current .bubble{box-shadow:0 0 0 2.5px var(--accent) !important}
+
+.calls-tabs{display:flex;gap:2px;padding:0 14px 12px}
+.calls-tabs button{
+  padding:6px 12px;border-radius:9999px;font-size:12.5px;font-weight:500;color:var(--text-2);
+  transition:background var(--dur),color var(--dur);flex:none;
+}
+.calls-tabs button:hover{background:var(--bg-hover);color:var(--text-1)}
+.calls-tabs button.active{background:var(--text-1);color:var(--bg-sidebar)}
+.call-row{
+  display:grid;grid-template-columns:auto 1fr auto;gap:12px;align-items:center;
+  padding:10px 12px;border-radius:12px;cursor:pointer;transition:background var(--dur);
+}
+.call-row:hover{background:var(--bg-hover)}
+.call-row .meta{min-width:0}
+.call-row .name{font-size:14px;font-weight:500;color:var(--text-1);display:flex;align-items:center;gap:6px}
+.call-row .sub{font-size:12.5px;color:var(--text-3);display:flex;align-items:center;gap:5px;margin-top:1px}
+.call-row .sub svg{width:14px;height:14px;flex:none}
+.call-row .sub.missed{color:var(--danger)}
+.call-row .call-acts{display:flex;gap:2px}
 
 .bottom-nav{
   display:none;position:fixed;bottom:0;left:0;right:0;
@@ -1124,6 +1195,9 @@ svg{display:block;flex:none}
     </div>
     <button class="rail-btn active" data-rail="chats" title="Chats">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
+    </button>
+    <button class="rail-btn" data-rail="calls" title="Calls">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.9.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
     </button>
     <button class="rail-btn" data-rail="contacts" title="Contacts">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
@@ -1261,6 +1335,10 @@ svg{display:block;flex:none}
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
     <span>Chats</span>
   </button>
+  <button class="nav-btn" data-rail="calls">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.9.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+    <span>Calls</span>
+  </button>
   <button class="nav-btn" data-rail="contacts">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
     <span>Contacts</span>
@@ -1296,6 +1374,56 @@ svg{display:block;flex:none}
   <div class="slideover-body" id="notifBody"></div>
 </aside>
 
+<div class="call-screen hidden" id="callScreen">
+  <div class="call-bg"></div>
+  <video id="callRemoteVideo" class="call-video hidden" autoplay playsinline></video>
+  <video id="callLocalVideo" class="call-local-video hidden" autoplay playsinline muted></video>
+  <div class="call-content">
+    <div id="callPeerAvatar"></div>
+    <h2 id="callPeerName">—</h2>
+    <div class="call-status" id="callStatus">Connecting…</div>
+    <div class="call-timer hidden" id="callTimer">00:00</div>
+  </div>
+  <div class="call-actions">
+    <button class="call-btn hidden" id="btnCallMute" title="Mute">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+    </button>
+    <button class="call-btn hidden" id="btnCallCam" title="Toggle camera">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
+    </button>
+    <button class="call-btn end" id="btnCallEnd" title="End call">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="transform:rotate(135deg)"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.9.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+    </button>
+  </div>
+</div>
+
+<div class="modal-back hidden" id="incomingBack" style="z-index:90">
+  <div class="modal" style="width:min(380px,100%)">
+    <div class="incoming-body">
+      <div id="incomingAvatar"></div>
+      <h3 id="incomingName">Incoming call</h3>
+      <p id="incomingKind">Voice call</p>
+      <div style="display:flex;gap:18px;justify-content:center;margin-top:20px">
+        <button class="call-btn end" id="btnIncomingDecline" title="Decline">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="transform:rotate(135deg)"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.9.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+        </button>
+        <button class="call-btn accept" id="btnIncomingAccept" title="Accept">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.9.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal-back hidden" id="lightboxBack" style="z-index:95">
+  <div class="lightbox-inner">
+    <button class="icon-btn lightbox-close" id="lightboxClose">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+    </button>
+    <img id="lightboxImg" alt="" />
+  </div>
+</div>
+
 <div id="modalRoot"></div>
 <div id="menuRoot"></div>
 <div class="toast-container" id="toastRoot"></div>
@@ -1306,8 +1434,8 @@ window.NEXUS_BOOT = {
   initialConversationId: {{ nexus_initial_conversation_id|default:'null' }}
 };
 </script>
-<script src="{% static 'js/api.js' %}?v=6"></script>
-<script src="{% static 'js/socket.js' %}?v=6"></script>
-<script src="{% static 'js/nexus.js' %}?v=6"></script>
+<script src="{% static 'js/api.js' %}?v=7"></script>
+<script src="{% static 'js/socket.js' %}?v=7"></script>
+<script src="{% static 'js/nexus.js' %}?v=7"></script>
 </body>
 </html>

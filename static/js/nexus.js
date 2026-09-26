@@ -346,7 +346,6 @@
         Socket.on('reaction.updated', function (event) {
             var message = findMessage(event.conversation_id, event.message_id);
             if (!message) return;
-            API.get('/api/conversations/' + event.conversation_id + '/messages/?before=' + message.id).catch(function () {});
             toast((event.added ? 'Reaction added' : 'Reaction removed'));
             refreshMessages(event.conversation_id);
         });
@@ -363,6 +362,25 @@
             message.deleted = true;
             message.text = '';
             if (State.activeChatId === event.conversation_id) renderMessages();
+        });
+
+        /* ---------- call events (Phase 6.1) ---------- */
+        Socket.on('call.incoming', function (event) {
+            if (event.caller_id === State.me.id) return;
+            handleIncoming(event);
+        });
+        Socket.on('call.accepted', function (event) {
+            if (String(event.call_id) !== String(CALL_STATE.callId)) return;
+            if (CALL_STATE.isCaller) setCallStatus('Connecting…');
+        });
+        Socket.on('call.ended', function (event) {
+            if (String(event.call_id) !== String(CALL_STATE.callId)) return;
+            var wasActive = CALL_STATE.view === 'active';
+            teardownCall();
+            if (wasActive) toast('Call ended');
+        });
+        Socket.on('call.signal', function (event) {
+            handleSignalEvent(event);
         });
 
         Socket.connectUser();
@@ -680,10 +698,22 @@
         users: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>',
         search: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>',
         block: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>',
+        phone: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.9.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92z"/></svg>',
+        video: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>',
+        callIn: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 2 16 8 22 8"/><path d="M22 2l-6 6"/><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.9.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92z"/></svg>',
+        callOut: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><polyline points="8 8 2 8 2 2"/><path d="M2 2l6 6"/><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.9.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92z"/></svg>',
+        link: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>',
+        report: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg>',
+        image: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>',
     };
 
     /* ---------- messages interactions ---------- */
     $('#messages').addEventListener('click', function (e) {
+        var image = e.target.closest('.attach-img img');
+        if (image && image.src) {
+            openLightbox(image.src);
+            return;
+        }
         var reaction = e.target.closest('.reaction[data-react]');
         if (reaction) {
             var row = reaction.closest('.msg-row');
@@ -965,12 +995,25 @@
         showMenu(items, rect.right - 220, rect.bottom + 6);
     });
     $('#btnVoiceCall').addEventListener('click', function () {
-        toast('Voice calls coming soon');
+        var chat = activeChat();
+        if (chat && chat.kind !== 'group') startCall(chat.id, 'voice');
+        else if (chat) toast('Calls are 1:1 only');
     });
     $('#btnVideoCall').addEventListener('click', function () {
-        toast('Video calls coming soon');
+        var chat = activeChat();
+        if (chat && chat.kind !== 'group') startCall(chat.id, 'video');
+        else if (chat) toast('Calls are 1:1 only');
     });
-    $('#btnChatSearch').addEventListener('click', openGlobalSearch);
+    $('#btnCallEnd').addEventListener('click', hangUp);
+    $('#btnCallMute').addEventListener('click', toggleMute);
+    $('#btnCallCam').addEventListener('click', toggleCam);
+    $('#btnIncomingAccept').addEventListener('click', acceptIncomingCall);
+    $('#btnIncomingDecline').addEventListener('click', declineIncomingCall);
+    $('#lightboxClose').addEventListener('click', closeLightbox);
+    $('#lightboxBack').addEventListener('click', function (e) {
+        if (e.target.id === 'lightboxBack') closeLightbox();
+    });
+    $('#btnChatSearch').addEventListener('click', toggleInChatSearch);
 
     /* ---------- info panel ---------- */
     function openInfoPanel() {
@@ -994,21 +1037,27 @@
             '<div class="status-badge ' + (peer.is_online ? 'online' : 'offline') + '">' +
             (peer.is_online ? 'Online' : 'Offline') + '</div></div>' +
             '<div class="info-section"><div class="info-list">' +
+            '<button class="info-item" data-info-action="media">' + ICONS.image + '<span class="lbl">Media, links and docs</span></button>' +
             '<button class="info-item" data-info-action="search">' + ICONS.search + '<span class="lbl">Search in conversation</span></button>' +
             '<button class="info-item" data-info-action="clear">' + ICONS.trash + '<span class="lbl">Clear chat</span></button>' +
-            '<button class="info-item danger" data-info-action="block">' + ICONS.block + '<span class="lbl">Block contact</span></button>' +
+            '<button class="info-item" data-info-action="block">' + ICONS.block + '<span class="lbl">Block contact</span></button>' +
+            '<button class="info-item danger" data-info-action="report">' + ICONS.report + '<span class="lbl">Report contact</span></button>' +
             '</div></div>';
         $all('[data-info-action]').forEach(function (b) {
             b.addEventListener('click', function () {
                 var a = b.dataset.infoAction;
-                if (a === 'block') {
+                if (a === 'media') {
+                    openMediaGallery(chat.id);
+                } else if (a === 'block') {
                     API.post('/api/users/' + peer.id + '/block/').then(function () { toast('Contact blocked'); }).catch(function () {});
+                } else if (a === 'report') {
+                    showReportMenu(peer.id);
                 } else if (a === 'clear') {
                     API.post('/api/conversations/' + chat.id + '/clear/').then(function () {
                         chat.messages = []; renderMessages(); toast('Chat cleared');
                     }).catch(function () {});
                 } else {
-                    openGlobalSearch();
+                    toggleInChatSearch();
                 }
             });
         });
@@ -1113,6 +1162,573 @@
             renderNotifications(); renderNotificationsBadge();
         }).catch(function () {});
     });
+
+    /* ============================================================
+       CALLS (Phase 6.1) — history view + WebRTC 1:1 engine
+       ============================================================ */
+    var CALL_STATE = {
+        view: null,          // 'ringing' | 'active' | 'incoming'
+        callId: null,
+        conversationId: null,
+        kind: 'voice',
+        peer: null,
+        isCaller: false,
+        pc: null,
+        localStream: null,
+        remoteStream: null,
+        timerInterval: null,
+        startedAt: null,
+        pendingIce: [],
+        hasRemoteDesc: false,
+        incomingTimer: null,
+    };
+
+    var RTCCONFIG = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
+
+    function callPeerName() {
+        return (CALL_STATE.peer && CALL_STATE.peer.display_name) || 'Unknown';
+    }
+
+    function fmtDuration(totalSeconds) {
+        var s = Math.max(0, Math.floor(totalSeconds || 0));
+        var h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60;
+        function two(v) { return (v < 10 ? '0' : '') + v; }
+        return (h ? two(h) + ':' : '') + two(m) + ':' + two(sec);
+    }
+
+    function setCallStatus(text) {
+        var el = $('#callStatus');
+        if (el) el.textContent = text;
+    }
+
+    function fillCallPeerAvatar() {
+        $('#callPeerAvatar').innerHTML = avatarHtml(CALL_STATE.peer, '');
+    }
+
+    function openCallScreen(mode) {
+        fillCallPeerAvatar();
+        $('#callPeerName').textContent = callPeerName();
+        $('#callTimer').classList.add('hidden');
+        $('#callRemoteVideo').classList.add('hidden');
+        $('#callLocalVideo').classList.add('hidden');
+        $('#btnCallMute').classList.add('hidden');
+        $('#btnCallCam').classList.add('hidden');
+        $('#btnCallMute').classList.remove('active');
+        setCallStatus(mode === 'outgoing' ? 'Ringing…' : 'Incoming ' + (CALL_STATE.kind === 'video' ? 'video' : 'voice') + ' call…');
+        $('#callScreen').classList.remove('hidden');
+        setCallActionsForPhase(mode);
+    }
+
+    function setCallActionsForPhase(mode) {
+        var isVideo = CALL_STATE.kind === 'video';
+        // Mute is relevant once media flows; camera toggle only for video calls.
+        $('#btnCallMute').classList.toggle('hidden', mode === 'incoming');
+        $('#btnCallCam').classList.toggle('hidden', mode === 'incoming' || !isVideo);
+    }
+
+    function closeCallScreen() {
+        $('#callScreen').classList.add('hidden');
+        $('#incomingBack').classList.add('hidden');
+    }
+
+    function stopMedia() {
+        if (CALL_STATE.localStream) {
+            CALL_STATE.localStream.getTracks().forEach(function (t) { t.stop(); });
+        }
+        if (CALL_STATE.pc) {
+            CALL_STATE.pc.ontrack = null;
+            CALL_STATE.pc.onicecandidate = null;
+            try { CALL_STATE.pc.close(); } catch (e) { /* ignore */ }
+        }
+        if (CALL_STATE.timerInterval) clearInterval(CALL_STATE.timerInterval);
+        CALL_STATE.pc = null;
+        CALL_STATE.localStream = null;
+        CALL_STATE.remoteStream = null;
+        CALL_STATE.timerInterval = null;
+        CALL_STATE.pendingIce = [];
+        CALL_STATE.hasRemoteDesc = false;
+    }
+
+    function teardownCall() {
+        stopMedia();
+        closeCallScreen();
+        CALL_STATE.view = null;
+        CALL_STATE.callId = null;
+        CALL_STATE.conversationId = null;
+        CALL_STATE.peer = null;
+        clearTimeout(CALL_STATE.incomingTimer);
+    }
+
+    function startTimer() {
+        var timerEl = $('#callTimer');
+        CALL_STATE.startedAt = Date.now();
+        timerEl.classList.remove('hidden');
+        setCallStatus('Connected');
+        CALL_STATE.timerInterval = setInterval(function () {
+            timerEl.textContent = fmtDuration((Date.now() - CALL_STATE.startedAt) / 1000);
+        }, 500);
+    }
+
+    function getUserMediaSafe(video) {
+        var constraints = video
+            ? { audio: true, video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: 'user' } }
+            : { audio: true, video: false };
+        return navigator.mediaDevices.getUserMedia(constraints).catch(function (err) {
+            if (!video) throw err;
+            // Camera-free machines can still make the voice portion work.
+            return navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+        });
+    }
+
+    function createPeer() {
+        var pc = new RTCPeerConnection(RTCCONFIG);
+        CALL_STATE.localStream.getTracks().forEach(function (track) {
+            pc.addTrack(track, CALL_STATE.localStream);
+        });
+        CALL_STATE.remoteStream = new MediaStream();
+        pc.ontrack = function (event) {
+            CALL_STATE.remoteStream.addTrack(event.track);
+            var video = $('#callRemoteVideo');
+            var audioOnly = CALL_STATE.kind !== 'video';
+            if (audioOnly) return; // audio plays through the default output
+            video.srcObject = CALL_STATE.remoteStream;
+            video.classList.remove('hidden');
+            $('#callLocalVideo').classList.remove('hidden');
+        }
+        ;
+        pc.onicecandidate = function (event) {
+            if (!event.candidate) return;
+            API.post('/api/calls/' + CALL_STATE.callId + '/signal/', {
+                signal_type: 'ice', payload: event.candidate.toJSON(),
+            }).catch(function () { /* best effort */ });
+        };
+        pc.onconnectionstatechange = function () {
+            if (pc.connectionState === 'connected') startTimer();
+            if (pc.connectionState === 'failed') {
+                toast('Call connection failed');
+                hangUp();
+            }
+        };
+        return pc;
+    }
+
+    function sendPendingIce(pc) {
+        var queued = CALL_STATE.pendingIce;
+        CALL_STATE.pendingIce = [];
+        queued.forEach(function (candidate) {
+            pc.addIceCandidate(candidate).catch(function () { /* ignore */ });
+        });
+    }
+
+    function attachRemoteVideo(stream) {
+        CALL_STATE.remoteStream = stream;
+        var video = $('#callRemoteVideo');
+        if (CALL_STATE.kind === 'video') {
+            video.srcObject = stream;
+            video.classList.remove('hidden');
+            $('#callLocalVideo').classList.remove('hidden');
+        }
+    }
+
+    /* Caller: start ringing the peer. */
+    function startCall(conversationId, kind) {
+        if (CALL_STATE.view) { toast('Already in a call'); return; }
+        var chat = findChat(conversationId);
+        var peer = chat && chat.peer ? chat.peer : null;
+        if (!peer) { toast('Calls are 1:1 only'); return; }
+        API.post('/api/conversations/' + conversationId + '/calls/', { kind: kind }).then(function (call) {
+            CALL_STATE.view = 'ringing';
+            CALL_STATE.callId = call.id;
+            CALL_STATE.conversationId = call.conversation;
+            CALL_STATE.kind = call.kind;
+            CALL_STATE.peer = call.peer;
+            CALL_STATE.isCaller = true;
+            cacheUser(call.peer);
+            openCallScreen('outgoing');
+            // No answer within 45s: end the call (server marks it missed).
+            clearTimeout(CALL_STATE.incomingTimer);
+            CALL_STATE.incomingTimer = setTimeout(function () {
+                if (CALL_STATE.view === 'ringing') { toast('No answer'); hangUp(); }
+            }, 45000);
+            return getUserMediaSafe(call.kind === 'video').then(function (stream) {
+                CALL_STATE.localStream = stream;
+                var localVideo = $('#callLocalVideo');
+                if (call.kind === 'video') {
+                    localVideo.srcObject = stream;
+                    localVideo.classList.remove('hidden');
+                }
+                CALL_STATE.pc = createPeer();
+                return CALL_STATE.pc.createOffer().then(function (offer) {
+                    return CALL_STATE.pc.setLocalDescription(offer).then(function () {
+                        return API.post('/api/calls/' + CALL_STATE.callId + '/signal/', {
+                            signal_type: 'offer', payload: { sdp: CALL_STATE.pc.localDescription.sdp, type: CALL_STATE.pc.localDescription.type },
+                        });
+                    });
+                });
+            });
+        }).catch(function (err) {
+            toast(err.message || 'Could not start the call');
+            teardownCall();
+        });
+    }
+
+    /* Callee: accept an incoming ring. */
+    function acceptIncomingCall() {
+        clearTimeout(CALL_STATE.incomingTimer);
+        $('#incomingBack').classList.add('hidden');
+        API.post('/api/calls/' + CALL_STATE.callId + '/answer/').then(function () {
+            CALL_STATE.view = 'active';
+            $('#incomingBack').classList.add('hidden');
+            openCallScreen('incoming');
+            setCallStatus('Connecting…');
+            return getUserMediaSafe(CALL_STATE.kind === 'video').then(function (stream) {
+                CALL_STATE.localStream = stream;
+                var localVideo = $('#callLocalVideo');
+                if (CALL_STATE.kind === 'video') {
+                    localVideo.srcObject = stream;
+                    localVideo.classList.remove('hidden');
+                }
+                CALL_STATE.pc = createPeer();
+                sendPendingIce(CALL_STATE.pc);
+                if (CALL_STATE.pendingOffer) {
+                    applyRemoteOffer(CALL_STATE.pendingOffer);
+                    CALL_STATE.pendingOffer = null;
+                }
+            });
+        }).catch(function (err) {
+            toast(err.message || 'Could not answer');
+            teardownCall();
+        });
+    }
+    function declineIncomingCall() {
+        clearTimeout(CALL_STATE.incomingTimer);
+        API.post('/api/calls/' + CALL_STATE.callId + '/decline/').catch(function () { /* ignore */ });
+        teardownCall();
+    }
+
+    function hangUp() {
+        var callId = CALL_STATE.callId;
+        if (callId) {
+            API.post('/api/calls/' + callId + '/end/').catch(function () { /* ignore */ });
+        }
+        teardownCall();
+    }
+
+    function handleSignalEvent(event) {
+        if (event.from_id === State.me.id) return;
+        if (String(event.call_id) !== String(CALL_STATE.callId)) return;
+        if (event.signal_type === 'offer') {
+            if (CALL_STATE.hasRemoteDesc) return; // glare: keep the first offer
+            var desc = new RTCSessionDescription(event.payload);
+            if (CALL_STATE.pc) {
+                applyRemoteOffer(desc);
+            } else {
+                CALL_STATE.pendingOffer = desc; // acceptIncomingCall() picks it up
+            }
+            return;
+        }
+        if (event.signal_type === 'answer') {
+            if (!CALL_STATE.pc || CALL_STATE.hasRemoteDesc) return;
+            CALL_STATE.pc.setRemoteDescription(new RTCSessionDescription(event.payload)).then(function () {
+                CALL_STATE.hasRemoteDesc = true;
+                sendPendingIce(CALL_STATE.pc);
+            }).catch(function () { /* ignore */ });
+            return;
+        }
+        if (event.signal_type === 'ice') {
+            if (!CALL_STATE.pc || !CALL_STATE.hasRemoteDesc) {
+                CALL_STATE.pendingIce.push(event.payload);
+                return;
+            }
+            CALL_STATE.pc.addIceCandidate(new RTCIceCandidate(event.payload)).catch(function () { /* ignore */ });
+        }
+    }
+
+    function handleIncoming(event) {
+        if (CALL_STATE.view) return; // busy: server records a missed call when it times out
+        var peer = {
+            id: event.caller_id,
+            display_name: event.caller || 'Unknown',
+            avatar_url: (State.users[event.caller_id] || {}).avatar_url,
+        };
+        CALL_STATE.view = 'incoming';
+        CALL_STATE.callId = event.call_id;
+        CALL_STATE.conversationId = event.conversation_id;
+        CALL_STATE.kind = event.kind || 'voice';
+        CALL_STATE.peer = peer;
+        CALL_STATE.isCaller = false;
+        CALL_STATE.pendingOffer = null;
+        $('#incomingAvatar').innerHTML = avatarHtml(peer, '');
+        $('#incomingName').textContent = peer.display_name;
+        $('#incomingKind').textContent = (CALL_STATE.kind === 'video' ? 'Video call' : 'Voice call');
+        $('#incomingBack').classList.remove('hidden');
+        // Stop ringing after 45s; the caller's hang-up records the missed call.
+        clearTimeout(CALL_STATE.incomingTimer);
+        CALL_STATE.incomingTimer = setTimeout(teardownCall, 45000);
+    }
+
+    function toggleMute() {
+        if (!CALL_STATE.localStream) return;
+        var track = CALL_STATE.localStream.getAudioTracks()[0];
+        if (!track) return;
+        track.enabled = !track.enabled;
+        $('#btnCallMute').classList.toggle('active', !track.enabled);
+        toast(track.enabled ? 'Microphone on' : 'Microphone muted');
+    }
+
+    function toggleCam() {
+        if (!CALL_STATE.localStream) return;
+        var track = CALL_STATE.localStream.getVideoTracks()[0];
+        if (!track) return;
+        track.enabled = !track.enabled;
+        $('#btnCallCam').classList.toggle('active', !track.enabled);
+        toast(track.enabled ? 'Camera on' : 'Camera off');
+    }
+
+    /* ---------- calls rail view ---------- */
+    var CALLS_TAB = 'recent';
+    function openCallsView() {
+        API.get('/api/calls/').then(function (data) {
+            var calls = (data && (data.results || data)) || [];
+            calls.forEach(function (c) { cacheUser(c.peer); });
+            renderCallsModal(calls);
+        }).catch(function () { toast('Could not load call history'); });
+    }
+    function renderCallsModal(calls) {
+        var root = $('#modalRoot');
+        var filtered = function (tab) {
+            return calls.filter(function (c) {
+                if (tab === 'missed') return c.status === 'missed';
+                if (tab === 'voice') return c.kind === 'voice';
+                if (tab === 'video') return c.kind === 'video';
+                return true;
+            });
+        };
+        var draw = function () {
+            var list = filtered(CALLS_TAB);
+            root.innerHTML = '<div class="modal-back" id="callsBack" style="align-items:flex-start;padding-top:6vh">' +
+                '<div class="modal" style="width:min(560px,100%);max-height:86vh">' +
+                '<div class="modal-head"><h3>Calls</h3><button class="icon-btn" id="callsClose">' + ICONS.x + '</button></div>' +
+                '<div class="calls-tabs">' +
+                [['recent', 'Recent'], ['missed', 'Missed'], ['voice', 'Voice'], ['video', 'Video']].map(function (pair) {
+                    return '<button class="' + (CALLS_TAB === pair[0] ? 'active' : '') + '" data-ctab="' + pair[0] + '">' + pair[1] + '</button>';
+                }).join('') + '</div>' +
+                '<div class="modal-body" id="callsList" style="padding:8px">' +
+                (list.length ? list.map(function (c) {
+                    var missed = c.status === 'missed' || c.status === 'declined';
+                    var outgoing = c.direction === 'outgoing';
+                    var arrow = outgoing ? ICONS.callOut : ICONS.callIn;
+                    var sub = missed
+                        ? '<span class="sub missed">' + arrow + ' ' + esc(c.status) + '</span>'
+                        : '<span class="sub">' + arrow + ' ' + esc(c.direction) +
+                          (c.duration_seconds != null ? ' · ' + fmtDuration(c.duration_seconds) : '') + '</span>';
+                    return '<div class="call-row" data-conv="' + c.conversation + '">' +
+                        avatarHtml(c.peer, '') +
+                        '<div class="meta"><div class="name">' + esc(c.peer.display_name) + '</div>' + sub + '</div>' +
+                        '<div class="call-acts">' +
+                        '<button class="icon-btn" data-callvoice="' + c.conversation + '" title="Voice call">' + ICONS.phone + '</button>' +
+                        '<button class="icon-btn" data-callvideo="' + c.conversation + '" title="Video call">' + ICONS.video + '</button>' +
+                        '</div></div>';
+                }).join('') : '<div style="padding:24px;text-align:center;color:var(--text-3);font-size:13px">No calls yet. Start one from any chat.</div>') +
+                '</div></div></div>';
+            var close = function () { root.innerHTML = ''; };
+            $('#callsClose').addEventListener('click', close);
+            $('#callsBack').addEventListener('click', function (e) { if (e.target.id === 'callsBack') close(); });
+            $all('#callsList [data-ctab], .calls-tabs [data-ctab]').forEach(function (b) {
+                b.addEventListener('click', function () { CALLS_TAB = b.dataset.ctab; draw(); });
+            });
+            $all('#callsList [data-callvoice]').forEach(function (b) {
+                b.addEventListener('click', function () { close(); startCall(Number(b.dataset.callvoice), 'voice'); });
+            });
+            $all('#callsList [data-callvideo]').forEach(function (b) {
+                b.addEventListener('click', function () { close(); startCall(Number(b.dataset.callvideo), 'video'); });
+            });
+            $all('#callsList .call-row').forEach(function (row) {
+                row.addEventListener('click', function (e) {
+                    if (e.target.closest('button')) return;
+                    close();
+                    openChat(row.dataset.conv);
+                });
+            });
+        };
+        draw();
+    }
+
+
+    /* ============================================================
+       MEDIA GALLERY (Phase 6.2) + lightbox
+       ============================================================ */
+    function openLightbox(url) {
+        $('#lightboxImg').src = url;
+        $('#lightboxBack').classList.remove('hidden');
+    }
+    function closeLightbox() {
+        $('#lightboxImg').src = '';
+        $('#lightboxBack').classList.add('hidden');
+    }
+
+    var MG_TAB = 'media';
+    function openMediaGallery(conversationId) {
+        API.get('/api/conversations/' + conversationId + '/media/').then(function (data) {
+            var media = (data && data.media) || [];
+            var links = (data && data.links) || [];
+            media.forEach(function (m) { cacheUser(m.sender); });
+            renderMediaGalleryModal(media, links);
+        }).catch(function () { toast('Could not load media'); });
+    }
+
+    function renderMediaGalleryModal(media, links) {
+        var root = $('#modalRoot');
+        var emptyGallery = function (text) {
+            return '<div style="padding:24px;text-align:center;color:var(--text-3);font-size:13px">' + esc(text) + '</div>';
+        };
+        var draw = function () {
+            var images = media.filter(function (m) { return m.message_type === 'image'; });
+            var docs = media.filter(function (m) { return m.message_type !== 'image'; });
+            var body = '';
+            if (MG_TAB === 'media') {
+                body = images.length
+                    ? '<div class="media-grid">' + images.map(function (m) {
+                        return '<div class="media-thumb" data-url="' + esc(m.attachment_url) + '">' +
+                            '<img src="' + esc(m.attachment_url) + '" alt="" loading="lazy"></div>';
+                    }).join('') + '</div>'
+                    : emptyGallery('No images yet');
+            } else if (MG_TAB === 'links') {
+                body = links.length
+                    ? links.map(function (l) {
+                        return '<a class="link-row" href="' + esc(l.url) + '" target="_blank" rel="noopener noreferrer">' +
+                            ICONS.link + '<div class="meta"><div class="url">' + esc(l.url) + '</div>' +
+                            '<div class="sub">' + esc(l.sender || '') + ' · ' + fmtShort(l.created_at) + '</div></div></a>';
+                    }).join('')
+                    : emptyGallery('No links shared yet');
+            } else {
+                body = docs.length
+                    ? docs.map(function (m) {
+                        return '<a class="link-row" href="' + esc(m.attachment_url) + '" target="_blank" rel="noopener noreferrer">' +
+                            ICONS.file + '<div class="meta"><div class="url">' + esc(m.attachment_name || 'Attachment') + '</div>' +
+                            '<div class="sub">' + esc((m.sender && m.sender.display_name) || '') + ' · ' +
+                            esc(fmtBytes(m.attachment_size)) + ' · ' + fmtShort(m.created_at) + '</div></div></a>';
+                    }).join('')
+                    : emptyGallery('No documents yet');
+            }
+            root.innerHTML = '<div class="modal-back" id="mediaBack" style="align-items:flex-start;padding-top:6vh">' +
+                '<div class="modal" style="width:min(600px,100%);max-height:86vh">' +
+                '<div class="modal-head"><h3>Media, links and docs</h3>' +
+                '<button class="icon-btn" id="mediaClose">' + ICONS.x + '</button></div>' +
+                '<div class="calls-tabs">' +
+                [['media', 'Media'], ['links', 'Links'], ['docs', 'Docs']].map(function (pair) {
+                    return '<button class="' + (MG_TAB === pair[0] ? 'active' : '') + '" data-mgtab="' + pair[0] + '">' + pair[1] + '</button>';
+                }).join('') + '</div>' +
+                '<div class="modal-body" style="padding:12px">' + body + '</div></div></div>';
+            var close = function () { root.innerHTML = ''; };
+            $('#mediaClose').addEventListener('click', close);
+            $('#mediaBack').addEventListener('click', function (e) { if (e.target.id === 'mediaBack') close(); });
+            $all('[data-mgtab]').forEach(function (b) {
+                b.addEventListener('click', function () { MG_TAB = b.dataset.mgtab; draw(); });
+            });
+            $all('.media-thumb').forEach(function (thumb) {
+                thumb.addEventListener('click', function () { openLightbox(thumb.dataset.url); });
+            });
+        };
+        draw();
+    }
+
+    /* ============================================================
+       IN-CHAT SEARCH
+       ============================================================ */
+    var inchatHits = [];
+    var inchatCursor = 0;
+
+    function toggleInChatSearch() {
+        if ($('#inchatSearch')) { removeInChatSearch(); return; }
+        var chat = activeChat();
+        if (!chat) return;
+        var bar = document.createElement('div');
+        bar.className = 'inchat-search';
+        bar.id = 'inchatSearch';
+        bar.innerHTML = ICONS.search +
+            '<input id="inchatSearchInput" type="text" placeholder="Search in this chat…" spellcheck="false" />' +
+            '<span class="count" id="inchatCount"></span>' +
+            '<button class="icon-btn" id="inchatClose">' + ICONS.x + '</button>';
+        $('#chatPanel').insertBefore(bar, $('#messages'));
+        $('#inchatClose').addEventListener('click', removeInChatSearch);
+        var input = $('#inchatSearchInput');
+        input.focus();
+        input.addEventListener('input', function () { runInChatSearch(); });
+        input.addEventListener('keydown', function (e) {
+            if (e.key === 'Escape') removeInChatSearch();
+            if (e.key === 'Enter') { e.preventDefault(); cycleInChatHit(e.shiftKey ? -1 : 1); }
+        });
+        runInChatSearch();
+    }
+
+    function removeInChatSearch() {
+        var bar = $('#inchatSearch');
+        if (bar) bar.remove();
+        $all('#messages .msg-row.hit, #messages .msg-row.hit-current').forEach(function (row) {
+            row.classList.remove('hit', 'hit-current');
+        });
+        inchatHits = [];
+        inchatCursor = 0;
+    }
+
+    function runInChatSearch() {
+        var chat = activeChat();
+        if (!chat) return;
+        var query = (($('#inchatSearchInput') || {}).value || '').trim().toLowerCase();
+        $all('#messages .msg-row.hit, #messages .msg-row.hit-current').forEach(function (row) {
+            row.classList.remove('hit', 'hit-current');
+        });
+        inchatHits = [];
+        inchatCursor = 0;
+        if (!query) { $('#inchatCount').textContent = ''; return; }
+        chat.messages.forEach(function (m) {
+            if (m.deleted) return;
+            var haystack = (m.text || '') + ' ' + ((m.attachment && m.attachment.name) || '');
+            if (haystack.toLowerCase().includes(query)) inchatHits.push(String(m.id));
+        });
+        inchatHits.forEach(function (id) {
+            var row = $('#messages .msg-row[data-msg-id="' + id + '"]');
+            if (row) row.classList.add('hit');
+        });
+        $('#inchatCount').textContent = inchatHits.length ? ('1/' + inchatHits.length) : '0 results';
+        if (inchatHits.length) focusInChatHit(0);
+    }
+
+    function cycleInChatHit(delta) {
+        if (!inchatHits.length) return;
+        inchatCursor = (inchatCursor + delta + inchatHits.length) % inchatHits.length;
+        focusInChatHit(inchatCursor);
+        $('#inchatCount').textContent = (inchatCursor + 1) + '/' + inchatHits.length;
+    }
+
+    function focusInChatHit(index) {
+        $all('#messages .msg-row.hit-current').forEach(function (row) { row.classList.remove('hit-current'); });
+        var row = $('#messages .msg-row[data-msg-id="' + inchatHits[index] + '"]');
+        if (row) {
+            row.classList.add('hit-current');
+            row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+    }
+
+    /* ---------- report menu (Phase 6.2) ---------- */
+    var REPORT_REASONS = [
+        ['spam', 'Spam'],
+        ['harassment', 'Harassment'],
+        ['impersonation', 'Impersonation'],
+        ['inappropriate', 'Inappropriate content'],
+        ['other', 'Something else'],
+    ];
+
+    function showReportMenu(userId) {
+        showMenu(REPORT_REASONS.map(function (pair) {
+            return { label: pair[1], icon: ICONS.report, onClick: function () {
+                API.post('/api/users/' + userId + '/report/', { reason: pair[0] }).then(function () {
+                    toast('Report sent — contact blocked');
+                }).catch(function (err) { toast(err.message || 'Could not report'); });
+            } };
+        }), 120, 120);
+    }
 
     /* ---------- global search ---------- */
     $('#btnGlobalSearch').addEventListener('click', openGlobalSearch);
@@ -1522,6 +2138,7 @@
             closeMenus();
             return;
         }
+        if (name === 'calls') { openCallsView(); return; }
         if (name === 'contacts') { openContactsView(); return; }
         if (name === 'groups') { openGroupsView(); return; }
         if (name === 'settings') { openSettings('account'); return; }
