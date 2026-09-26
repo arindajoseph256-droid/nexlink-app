@@ -21,6 +21,10 @@
         peerTyping: {},      // conversationId -> {username: timeout}
         hasMore: {},         // conversationId -> bool (older pages exist)
         loadingOlder: false,
+        contacts: {},        // userId -> contact entry (Friends tab)
+        contactsLoaded: false,
+        activeTab: 'chats',
+        filter: 'all',       // all | unread | friends | groups
     };
 
     var els = {};
@@ -52,6 +56,24 @@
         if (d.toDateString() === today.toDateString()) return 'Today';
         if (d.toDateString() === yesterday.toDateString()) return 'Yesterday';
         return d.toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' });
+    }
+
+    /* WhatsApp list-style time: HH:MM today, "Yesterday", else short date. */
+    function formatListTime(iso) {
+        if (!iso) return '';
+        var d = new Date(iso);
+        var today = new Date();
+        var yesterday = new Date();
+        yesterday.setDate(today.getDate() - 1);
+        if (d.toDateString() === today.toDateString()) return formatTime(iso);
+        if (d.toDateString() === yesterday.toDateString()) return 'Yesterday';
+        return d.toLocaleDateString([], { day: 'numeric', month: 'numeric', year: '2-digit' });
+    }
+
+    /* Stable per-user hue for group sender-name colors. */
+    function hueFor(id) {
+        var n = Number(id) || 0;
+        return (n * 137) % 360;
     }
 
     function relativeLastSeen(iso) {
@@ -100,6 +122,66 @@
         return peer ? (peer.display_name || 'Conversation') : 'Conversation';
     }
 
+    function buildConversationRow(c) {
+        var peer = peerOf(c);
+        var unread = c.unread_count > 0;
+        var li = el('li', 'conv-item' + (c.id === state.conversationId ? ' is-active' : '') +
+            (unread ? ' conv-item--unread' : ''));
+        li.setAttribute('role', 'button');
+        li.setAttribute('tabindex', '0');
+
+        var avatar = el('div', 'avatar avatar--sm');
+        if (c.kind === 'group') {
+            avatar.appendChild(el('span', 'avatar__initials',
+                (c.name || 'Group').slice(0, 2).toUpperCase()));
+        } else if (peer && peer.avatar_url) {
+            var img = el('img');
+            img.src = peer.avatar_url;
+            img.alt = '';
+            avatar.appendChild(img);
+        } else {
+            avatar.appendChild(el('span', 'avatar__initials',
+                (peer && peer.display_name ? peer.display_name.slice(0, 2) : '??').toUpperCase()));
+            if (peer && peer.is_online) avatar.appendChild(el('span', 'presence-dot presence-dot--online'));
+        }
+
+        var body = el('div', 'conv-item__body');
+
+        var nameRow = el('div', 'conv-item__name');
+        nameRow.appendChild(el('span', null, conversationLabel(c)));
+        var lastMsg = c.last_message;
+        nameRow.appendChild(el('span', 'conv-item__time',
+            lastMsg ? formatListTime(lastMsg.created_at) : ''));
+
+        var previewRow = el('div', 'conv-item__preview');
+        var typingNow = state.peerTyping[c.id] && Object.keys(state.peerTyping[c.id]).length;
+        if (typingNow) {
+            previewRow.appendChild(el('span', 'is-typing', 'typing…'));
+        } else if (lastMsg) {
+            var prefix = lastMsg.sender_id === ME ? 'You: ' : '';
+            var previewText = prefix + (lastMsg.is_deleted ? 'Message deleted' : lastMsg.body);
+            previewRow.appendChild(el('span', null, previewText));
+        } else {
+            previewRow.appendChild(el('span', null, 'No messages yet'));
+        }
+        if (c.unread_count > 0) {
+            previewRow.appendChild(el('span', 'unread-pill', String(c.unread_count)));
+        }
+
+        body.appendChild(nameRow);
+        body.appendChild(previewRow);
+        li.appendChild(avatar);
+        li.appendChild(body);
+
+        function open() { openConversation(c.id); }
+        li.addEventListener('click', open);
+        li.addEventListener('keydown', function (e) {
+            if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); }
+        });
+
+        return li;
+    }
+
     function renderConversationList() {
         var list = $('conversation-list');
         if (!list) return;
@@ -111,64 +193,67 @@
             return tb - ta;
         });
 
-        var empty = $('conv-empty');
-        if (empty) empty.hidden = items.length > 0;
-
-        items.forEach(function (c) {
-            var peer = peerOf(c);
-            var li = el('li', 'conv-item' + (c.id === state.conversationId ? ' is-active' : ''));
-            li.setAttribute('role', 'button');
-            li.setAttribute('tabindex', '0');
-
-            var avatar = el('div', 'avatar avatar--sm');
-            if (peer && peer.avatar_url) {
-                var img = el('img');
-                img.src = peer.avatar_url;
-                img.alt = '';
-                avatar.appendChild(img);
-            } else {
-                avatar.appendChild(el('span', 'avatar__initials',
-                    (peer && peer.display_name ? peer.display_name.slice(0, 2) : '??').toUpperCase()));
-                if (peer && peer.is_online) avatar.appendChild(el('span', 'presence-dot presence-dot--online'));
+        // WhatsApp filter chips: All / Unread / Friends / Groups.
+        var filtered = items.filter(function (c) {
+            if (state.filter === 'unread') return (c.unread_count || 0) > 0;
+            if (state.filter === 'groups') return c.kind === 'group';
+            if (state.filter === 'friends') {
+                return c.kind !== 'group' && !!state.contacts[peerOf(c) && peerOf(c).id];
             }
-
-            var body = el('div', 'conv-item__body');
-
-            var nameRow = el('div', 'conv-item__name');
-            nameRow.appendChild(el('span', null, conversationLabel(c)));
-            var lastMsg = c.last_message;
-            nameRow.appendChild(el('span', 'conv-item__time',
-                lastMsg ? formatTime(lastMsg.created_at) : ''));
-
-            var previewRow = el('div', 'conv-item__preview');
-            var typingNow = state.peerTyping[c.id] && Object.keys(state.peerTyping[c.id]).length;
-            var previewText;
-            if (typingNow) {
-                previewText = 'typing…';
-                previewRow.appendChild(el('span', 'is-typing', previewText));
-            } else if (lastMsg) {
-                var prefix = lastMsg.sender_id === ME ? 'You: ' : '';
-                previewText = prefix + (lastMsg.is_deleted ? 'Message deleted' : lastMsg.body);
-                previewRow.appendChild(el('span', null, previewText));
-            } else {
-                previewRow.appendChild(el('span', null, 'No messages yet'));
-            }
-            if (c.unread_count > 0) {
-                previewRow.appendChild(el('span', 'unread-pill', String(c.unread_count)));
-            }
-
-            body.appendChild(nameRow);
-            body.appendChild(previewRow);
-            li.appendChild(avatar);
-            li.appendChild(body);
-
-            function open() { openConversation(c.id); }
-            li.addEventListener('click', open);
-            li.addEventListener('keydown', function (e) {
-                if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); }
-            });
-            list.appendChild(li);
+            return true;
         });
+
+        var empty = $('conv-empty');
+        if (empty) {
+            empty.hidden = filtered.length > 0;
+            if (!empty.hidden && state.filter !== 'all') {
+                empty.querySelector('p').textContent =
+                    state.filter === 'unread' ? 'No unread chats.' :
+                    state.filter === 'groups' ? 'No groups yet.' :
+                    'No chats with friends yet.';
+            }
+        }
+
+        filtered.forEach(function (c) {
+            list.appendChild(buildConversationRow(c));
+        });
+
+        renderGroups(items);
+        updateChatsBadge(items);
+        updateUnreadChip(items);
+    }
+
+    function updateUnreadChip(items) {
+        var chip = $('chip-unread-count');
+        if (!chip) return;
+        var total = (items || []).filter(function (c) {
+            return (c.unread_count || 0) > 0;
+        }).length;
+        chip.hidden = total === 0;
+        chip.textContent = String(total);
+    }
+
+    function renderGroups(items) {
+        var list = $('groups-list');
+        if (!list) return;
+        list.textContent = '';
+
+        var groups = (items || []).filter(function (c) { return c.kind === 'group'; });
+        var empty = $('groups-empty');
+        if (empty) empty.hidden = groups.length > 0;
+
+        groups.forEach(function (c) {
+            list.appendChild(buildConversationRow(c));
+        });
+    }
+
+    function updateChatsBadge(items) {
+        var badge = $('tab-chats-badge');
+        if (!badge) return;
+        var total = 0;
+        (items || []).forEach(function (c) { total += c.unread_count || 0; });
+        badge.hidden = total === 0;
+        badge.textContent = total > 99 ? '99+' : String(total);
     }
 
     function updateConversationFromMessage(conversationId, message) {
@@ -210,6 +295,7 @@
                 return;
             }
             timer = setTimeout(function () {
+                activateTab('chats');
                 API.get('/api/users/search/?q=' + encodeURIComponent(q)).then(function (data) {
                     resultsList.textContent = '';
                     resultsBox.hidden = false;
@@ -235,8 +321,27 @@
                         body.appendChild(nameRow);
                         if (user.about) body.appendChild(el('div', 'conv-item__preview', user.about));
 
+                        var star = el('button', 'icon-btn conv-item__star', '★');
+                        star.type = 'button';
+                        function refreshStar() {
+                            var saved = !!state.contacts[user.id];
+                            star.classList.toggle('is-contact', saved);
+                            star.title = saved ? 'Remove from friends' : 'Add to friends';
+                            star.setAttribute('aria-label', star.title);
+                        }
+                        refreshStar();
+                        star.addEventListener('click', function (e) {
+                            e.stopPropagation();
+                            if (state.contacts[user.id]) {
+                                removeContact(user.id).then(refreshStar);
+                            } else {
+                                addContact(user).then(refreshStar);
+                            }
+                        });
+
                         li.appendChild(avatar);
                         li.appendChild(body);
+                        li.appendChild(star);
 
                         function start() {
                             API.post('/api/conversations/start/', { user_id: user.id })
@@ -393,11 +498,22 @@
 
     function buildMessageNode(m, conversationId) {
         var mine = m.sender.id === ME;
+        var c = state.conversations[conversationId];
+        var isGroup = c && c.kind === 'group';
         var row = el('div', 'msg ' + (mine ? 'msg--mine' : 'msg--theirs') +
             (m.is_deleted ? ' msg--deleted' : ''));
         row.setAttribute('data-message-id', m.id);
 
         var bubbleWrap = el('div');
+
+        var bubble = el('div', 'msg__bubble');
+
+        if (isGroup && !mine && !m.is_deleted) {
+            var nameRow = el('div', 'msg__sender');
+            nameRow.textContent = m.sender.display_name || 'Someone';
+            nameRow.style.setProperty('--hue', hueFor(m.sender.id));
+            bubble.appendChild(nameRow);
+        }
 
         if (m.reply_to && !m.is_deleted) {
             var reply = el('div', 'msg__reply');
@@ -405,12 +521,12 @@
                 ? 'Deleted message'
                 : (m.reply_to.body || '');
             reply.textContent = (m.reply_to.sender_name || '') + ': ' + replyBody;
-            bubbleWrap.appendChild(reply);
+            bubble.appendChild(reply);
         }
 
-        var bubble = el('div', 'msg__bubble');
+        var bodyNode = el('div', 'msg__text');
         if (m.is_deleted) {
-            bubble.textContent = 'This message was deleted';
+            bubble.appendChild(el('span', null, 'This message was deleted'));
         } else if (m.editing) {
             bubble.appendChild(buildEditBox(m, conversationId));
         } else {
@@ -418,9 +534,30 @@
                 appendAttachment(bubble, m);
             }
             if (m.body) {
-                bubble.appendChild(el('div', null, m.body)); // textContent — safe rendering
+                bodyNode.textContent = m.body; // textContent — safe rendering
+                bubble.appendChild(bodyNode);
             }
         }
+
+        // In-bubble meta: time + status ticks (mine), floated right.
+        var meta = el('span', 'msg__meta');
+        meta.appendChild(el('span', null, formatTime(m.created_at)));
+        if (m.edited_at && !m.is_deleted) {
+            meta.appendChild(el('span', 'msg__edited', '(edited)'));
+        }
+        if (mine && !m.is_deleted) {
+            var status = el('span', 'msg__status');
+            status.setAttribute('aria-label',
+                (m.state === 'read' || (m.read_by && m.read_by.length)) ? 'Read' : 'Sent');
+            var ticks = (m.state === 'read' || (m.read_by && m.read_by.length > 0))
+                ? 'M1 6.5L4.5 10 11 3.5M8 9.5l1.5 1.5L16 4.5'
+                : 'M1 6.5L4.5 10 11 3.5';
+            status.innerHTML =
+                '<svg viewBox="0 0 17 13" aria-hidden="true"><path d="' + ticks + '"/></svg>';
+            meta.appendChild(status);
+        }
+        bubble.appendChild(meta);
+
         bubbleWrap.appendChild(bubble);
 
         // Reactions
@@ -439,22 +576,6 @@
             });
             bubbleWrap.appendChild(reactionRow);
         }
-
-        // Meta: time + status ticks (mine)
-        var meta = el('div', 'msg__meta');
-        meta.appendChild(el('span', null, formatTime(m.created_at)));
-        if (m.edited_at && !m.is_deleted) {
-            meta.appendChild(el('span', 'msg__edited', '(edited)'));
-        }
-        if (mine && !m.is_deleted) {
-            var status = el('span', 'msg__status');
-            status.appendChild(el('span', 'tick tick--sent', '✓'));
-            if (m.state === 'read' || (m.read_by && m.read_by.length > 0)) {
-                status.appendChild(el('span', 'tick tick--read', '✓'));
-            }
-            meta.appendChild(status);
-        }
-        bubbleWrap.appendChild(meta);
 
         row.appendChild(bubbleWrap);
 
@@ -718,6 +839,40 @@
        Composer
        ====================================================================== */
 
+    var EMOJIS = ('😀 😃 😄 😁 😆 😅 🤣 😂 🙂 😉 😊 😇 🥰 😍 🤩 😘 😗 😚 😙 😋 ' +
+        '😛 😜 🤪 😝 🤑 🤗 🤭 🤫 🤔 🤐 😐 😑 😶 😏 😒 🙄 😬 🤥 😌 😔 ' +
+        '😪 🤤 😴 😷 🤒 🤕 🤢 🤮 🥵 🥶 😵 🤯 🤠 🥳 😎 🤓 🧐 😕 😟 🙁 😮 ' +
+        '😯 😦 😧 😴 😢 😭 😱 😖 😣 😞 😓 😩 😫 🥱 😤 😡 😠 🤬 😈 👿 💀 ' +
+        '💩 🤡 👻 👽 🤖 👍 👎 👌 ✌️ 🤞 🤟 🤘 👏 🙌 🤝 🙏 💪 ❤️ 🧡 💛 💚 ' +
+        '💙 💜 🖤 🔥 ✨ 🎉 🎊 🎁 🌹 🥀 💐 ☕ 🍕 🍔 🍟 🌮 🍿 ⚽ 🏀 🎮 🎵').split(/\s+/);
+
+    function toggleEmojiPanel(force) {
+        var panel = $('emoji-panel');
+        if (!panel) return;
+        var show = typeof force === 'boolean' ? force : panel.hidden;
+        if (show && !panel.dataset.built) {
+            EMOJIS.forEach(function (e) {
+                var b = el('button', null, e);
+                b.type = 'button';
+                b.setAttribute('aria-label', 'Insert ' + e);
+                b.addEventListener('click', function () {
+                    var input = $('message-input');
+                    if (!input) return;
+                    var s = input.selectionStart || input.value.length;
+                    var epos = input.selectionEnd || s;
+                    input.value = input.value.slice(0, s) + e + input.value.slice(epos);
+                    input.focus();
+                    var np = s + e.length;
+                    input.setSelectionRange(np, np);
+                    notifyTyping();
+                });
+                panel.appendChild(b);
+            });
+            panel.dataset.built = '1';
+        }
+        panel.hidden = !show;
+    }
+
     function bindComposer() {
         var form = $('composer');
         var input = $('message-input');
@@ -725,12 +880,30 @@
         var attachmentInput = $('attachment-input');
         var attachmentButton = $('attachment-button');
         if (attachmentButton && attachmentInput) {
-            attachmentButton.addEventListener('click', function () { attachmentInput.click(); });
+            attachmentButton.addEventListener('click', function () {
+                toggleEmojiPanel(false);
+                attachmentInput.click();
+            });
             attachmentInput.addEventListener('change', function () {
                 var file = attachmentInput.files && attachmentInput.files[0];
                 if (file) toast('Attached: ' + file.name);
             });
         }
+
+        var emojiBtn = $('emoji-btn');
+        if (emojiBtn) {
+            emojiBtn.addEventListener('click', function (e) {
+                e.stopPropagation();
+                toggleEmojiPanel();
+            });
+        }
+        document.addEventListener('click', function (e) {
+            var panel = $('emoji-panel');
+            if (panel && !panel.hidden && !panel.contains(e.target) &&
+                e.target !== emojiBtn && !(emojiBtn && emojiBtn.contains(e.target))) {
+                toggleEmojiPanel(false);
+            }
+        });
 
         // Auto-grow textarea
         input.addEventListener('input', function () {
@@ -828,10 +1001,13 @@
         var nameEl = $('chat-peer-name');
         var statusEl = $('chat-peer-status');
         var avatarEl = $('chat-peer-avatar');
+        var infoBtn = $('chat-info-btn');
         if (!c) {
             if (nameEl) nameEl.textContent = 'Conversation';
+            if (infoBtn) infoBtn.hidden = true;
             return;
         }
+        if (infoBtn) infoBtn.hidden = c.kind !== 'group';
         var peer = peerOf(c);
         if (c.kind === 'group') {
             if (nameEl) nameEl.textContent = c.name || 'Group chat';
@@ -913,17 +1089,24 @@
             // A peer read our latest message — upgrade ticks to read.
             var messages = state.messages[state.conversationId] || [];
             if (data.user_id === ME) return;
+            var changed = false;
             messages.forEach(function (m) {
-                if (m.sender.id === ME && m.id <= data.message_id) {
+                if (m.sender.id === ME && m.id <= data.message_id && m.state !== 'read') {
                     m.state = 'read';
                     if (m.read_by && m.read_by.indexOf(data.user_id) < 0) {
                         m.read_by.push(data.user_id);
                     }
+                    changed = true;
                 }
             });
-            if (data.message_id) {
-                var m = findMessageData(data.message_id);
-                if (m) rerenderMessage(m.id);
+            if (changed) {
+                // Re-render only my bubbles whose ticks changed.
+                var container = els.messages || $('messages');
+                if (container) {
+                    messages.forEach(function (m) {
+                        if (m.sender.id === ME && m.id <= data.message_id) rerenderMessage(m.id);
+                    });
+                }
             }
         });
 
@@ -1016,6 +1199,14 @@
         var newChat = $('new-chat-btn');
         if (newChat) {
             newChat.addEventListener('click', function () {
+                var search = $('conv-search');
+                if (search) search.focus();
+            });
+        }
+        var fab = $('fab-new-chat');
+        if (fab) {
+            fab.addEventListener('click', function () {
+                activateTab('chats');
                 var search = $('conv-search');
                 if (search) search.focus();
             });
@@ -1205,6 +1396,309 @@
     }
 
     /* ======================================================================
+       Sidebar tabs & WhatsApp filter chips
+       ====================================================================== */
+
+    function bindTabs() {
+        var chips = document.querySelectorAll('#wa-filters .wa-chip');
+        chips.forEach(function (chip) {
+            chip.addEventListener('click', function () {
+                var f = chip.getAttribute('data-filter') || 'all';
+                state.filter = f;
+                chips.forEach(function (c) {
+                    var isSel = c === chip;
+                    c.classList.toggle('is-active', isSel);
+                    c.setAttribute('aria-selected', isSel ? 'true' : 'false');
+                });
+                renderConversationList();
+            });
+        });
+
+        var railBtns = document.querySelectorAll('.rail__btn[data-rail]');
+        railBtns.forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                var target = btn.getAttribute('data-rail');
+                railBtns.forEach(function (b) {
+                    b.classList.toggle('is-active', b === btn);
+                });
+                if (target === 'groups') {
+                    activateTab('groups');
+                } else if (target === 'friends') {
+                    activateTab('friends');
+                } else {
+                    activateTab('chats');
+                }
+            });
+        });
+
+        var notifications = $('rail-notifications');
+        if (notifications) {
+            notifications.addEventListener('click', function () {
+                API.get('/api/notifications/').then(function (data) {
+                    var items = (data && (data.results || data)) || [];
+                    if (!items.length) {
+                        toast('You\'re all caught up — no new notifications.');
+                        return;
+                    }
+                    toast(items.length + ' recent notification' +
+                        (items.length === 1 ? '' : 's') + '. Latest: ' +
+                        (items[0].kind || 'update'));
+                }).catch(function () {
+                    toast('Could not load notifications.', true);
+                });
+            });
+        }
+    }
+
+    function activateTab(name) {
+        state.activeTab = name || 'chats';
+        document.querySelectorAll('.sidebar__section[data-panel]').forEach(function (panel) {
+            panel.hidden = panel.getAttribute('data-panel') !== state.activeTab;
+        });
+        var searchResults = $('search-results');
+        if (searchResults) searchResults.hidden = state.activeTab !== 'chats';
+
+        if (state.activeTab === 'friends' && !state.contactsLoaded) {
+            loadContacts();
+        }
+    }
+
+    /* ---------- Friends (saved contacts) ---------- */
+
+    function loadContacts() {
+        var loading = $('friends-loading');
+        if (loading) loading.hidden = false;
+        return API.get('/api/contacts/').then(function (data) {
+            state.contacts = {};
+            ((data && data.results) || []).forEach(function (contact) {
+                state.contacts[contact.contact_id] = contact;
+            });
+            state.contactsLoaded = true;
+            renderContacts();
+        }).catch(function (err) {
+            toast('Could not load friends: ' + err.message, true);
+        }).then(function () {
+            if (loading) loading.hidden = true;
+        });
+    }
+
+    function renderContacts() {
+        var list = $('contacts-list');
+        if (!list) return;
+        list.textContent = '';
+
+        var people = Object.values(state.contacts).sort(function (a, b) {
+            var an = (a.display_name || '').toLowerCase();
+            var bn = (b.display_name || '').toLowerCase();
+            return an < bn ? -1 : an > bn ? 1 : 0;
+        });
+
+        var empty = $('friends-empty');
+        if (empty) empty.hidden = people.length > 0;
+
+        people.forEach(function (contact) {
+            var userId = contact.contact_id;
+            var name = contact.nickname || contact.display_name || 'Unknown';
+
+            var li = el('li', 'conv-item');
+            li.setAttribute('role', 'button');
+            li.setAttribute('tabindex', '0');
+
+            var avatar = el('div', 'avatar avatar--sm');
+            if (contact.avatar_url) {
+                var img = el('img');
+                img.src = contact.avatar_url;
+                img.alt = '';
+                avatar.appendChild(img);
+            } else {
+                avatar.appendChild(el('span', 'avatar__initials', name.slice(0, 2).toUpperCase()));
+            }
+
+            var body = el('div', 'conv-item__body');
+            var nameRow = el('div', 'conv-item__name');
+            nameRow.appendChild(el('span', null, name));
+            body.appendChild(nameRow);
+
+            var chatBtn = el('button', 'icon-btn conv-item__star', '💬');
+            chatBtn.type = 'button';
+            chatBtn.title = 'Open chat';
+            chatBtn.setAttribute('aria-label', 'Open chat with ' + name);
+            chatBtn.addEventListener('click', function (e) {
+                e.stopPropagation();
+                startChatWith(userId, name);
+            });
+
+            var removeBtn = el('button', 'icon-btn conv-item__star', '✕');
+            removeBtn.type = 'button';
+            removeBtn.title = 'Remove from friends';
+            removeBtn.setAttribute('aria-label', 'Remove ' + name + ' from friends');
+            removeBtn.addEventListener('click', function (e) {
+                e.stopPropagation();
+                removeContact(userId);
+            });
+
+            li.appendChild(avatar);
+            li.appendChild(body);
+            li.appendChild(chatBtn);
+            li.appendChild(removeBtn);
+
+            function open() { startChatWith(userId, name); }
+            li.addEventListener('click', open);
+            li.addEventListener('keydown', function (e) {
+                if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); }
+            });
+            list.appendChild(li);
+        });
+    }
+
+    function startChatWith(userId, name) {
+        API.post('/api/conversations/start/', { user_id: userId })
+            .then(function (conversation) {
+                state.conversations[conversation.id] = conversation;
+                renderConversationList();
+                activateTab('chats');
+                openConversation(conversation.id, true);
+            })
+            .catch(function (err) {
+                toast('Could not open chat with ' + (name || 'user') + ': ' + err.message, true);
+            });
+    }
+
+    function addContact(user) {
+        return API.post('/api/contacts/', { user_id: user.id }).then(function (contact) {
+            state.contacts[user.id] = contact;
+            renderContacts();
+            toast('Added ' + (user.display_name || 'friend') + ' to your friends.');
+        }).catch(function (err) {
+            toast('Could not add friend: ' + err.message, true);
+        });
+    }
+
+    function removeContact(userId) {
+        return API.delete('/api/contacts/' + userId + '/').then(function () {
+            delete state.contacts[userId];
+            renderContacts();
+        }).catch(function (err) {
+            toast('Could not remove friend: ' + err.message, true);
+        });
+    }
+
+    /* ---------- Group info modal ---------- */
+
+    function bindGroupInfo() {
+        var infoBtn = $('chat-info-btn');
+        if (infoBtn) {
+            infoBtn.addEventListener('click', function () {
+                openGroupInfo(state.conversationId);
+            });
+        }
+        var closeBtn = $('group-info-close');
+        if (closeBtn) closeBtn.addEventListener('click', closeGroupInfo);
+        var doneBtn = $('group-info-done');
+        if (doneBtn) doneBtn.addEventListener('click', closeGroupInfo);
+        var leaveBtn = $('group-info-leave');
+        if (leaveBtn) {
+            leaveBtn.addEventListener('click', function () {
+                if (!window.confirm('Leave this group?')) return;
+                var conversationId = state.conversationId;
+                API.post('/api/groups/' + conversationId + '/leave/')
+                    .then(function () {
+                        closeGroupInfo();
+                        Socket.close();
+                        delete state.conversations[conversationId];
+                        renderConversationList();
+                        state.conversationId = null;
+                        var container = els.messages || $('messages');
+                        if (container) container.textContent = '';
+                        if (window.history.replaceState) {
+                            window.history.replaceState(null, '', '/');
+                        }
+                        document.getElementById('chat-app').classList.remove('chat-app--active');
+                        toast('You left the group.');
+                    })
+                    .catch(function (err) {
+                        toast('Could not leave group: ' + err.message, true);
+                    });
+            });
+        }
+        var modal = $('group-info-modal');
+        if (modal) {
+            modal.addEventListener('click', function (e) {
+                if (e.target === modal) closeGroupInfo();
+            });
+            modal.addEventListener('keydown', function (e) {
+                if (e.key === 'Escape') closeGroupInfo();
+            });
+        }
+    }
+
+    function openGroupInfo(conversationId) {
+        var modal = $('group-info-modal');
+        if (!modal || !conversationId) return;
+        modal.hidden = false;
+        var members = $('group-info-members');
+        if (members) {
+            members.textContent = '';
+            members.appendChild(el('li', 'sidebar__empty', 'Loading…'));
+        }
+        API.get('/api/groups/' + conversationId + '/').then(function (group) {
+            var nameEl = $('group-info-name');
+            var descEl = $('group-info-desc');
+            var avatarEl = $('group-info-avatar');
+            if (nameEl) nameEl.textContent = group.name || 'Group chat';
+            if (descEl) descEl.textContent = group.description || '';
+            if (avatarEl) {
+                avatarEl.textContent = '';
+                avatarEl.appendChild(el('span', 'avatar__initials',
+                    (group.name || 'Group').slice(0, 2).toUpperCase()));
+            }
+            var membersTitle = $('group-info-members-title');
+            if (membersTitle) {
+                membersTitle.textContent = 'Members (' + (group.participants || []).length + ')';
+            }
+            if (members) {
+                members.textContent = '';
+                (group.participants || []).forEach(function (member) {
+                    var li = el('li', 'group-person group-person--static');
+                    var avatar = el('div', 'avatar avatar--sm');
+                    if (member.avatar_url) {
+                        var img = el('img');
+                        img.src = member.avatar_url;
+                        img.alt = '';
+                        avatar.appendChild(img);
+                    } else {
+                        avatar.appendChild(el('span', 'avatar__initials',
+                            (member.display_name || '??').slice(0, 2).toUpperCase()));
+                    }
+                    var body = el('div', 'group-person__body');
+                    body.appendChild(el('span', 'group-person__name', member.display_name || 'Unknown'));
+                    li.appendChild(avatar);
+                    li.appendChild(body);
+                    if (member.is_admin) li.appendChild(el('span', 'group-person__role', 'Admin'));
+                    if (member.id === ME) li.appendChild(el('span', 'group-person__role', 'You'));
+                    members.appendChild(li);
+                });
+            }
+            // Refresh sidebar/header with any updated group details.
+            var c = state.conversations[conversationId];
+            if (c) {
+                c.name = group.name;
+                c.participants = group.participants;
+                renderConversationList();
+                updateHeader(conversationId);
+            }
+        }).catch(function (err) {
+            closeGroupInfo();
+            toast('Could not load group info: ' + err.message, true);
+        });
+    }
+
+    function closeGroupInfo() {
+        var modal = $('group-info-modal');
+        if (modal) modal.hidden = true;
+    }
+
+    /* ======================================================================
        Init
        ====================================================================== */
 
@@ -1214,7 +1708,10 @@
         bindComposer();
         bindNavigation();
         bindGroupModal();
+        bindTabs();
+        bindGroupInfo();
         bindSocketHandlers();
+        loadContacts();
 
         startUserSocketOnce();
         loadConversations();

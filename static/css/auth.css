@@ -252,7 +252,7 @@
     padding: clamp(1.5rem, 4vw, 3rem);
     background:
         radial-gradient(600px 300px at 20% 20%, rgba(255, 255, 255, 0.14) 0%, transparent 60%),
-        linear-gradient(150deg, #4f6ef7 0%, #6a5cf0 55%, #8b5cf6 100%);
+        linear-gradient(150deg, #00a884 0%, #008069 55%, #06cf9c 100%);
     color: #fff;
 }
 
@@ -347,7 +347,7 @@ html[data-theme="dark"] .auth-card {
     width: 32px;
     height: 32px;
     border-radius: 10px;
-    background: linear-gradient(135deg, var(--c-primary), #7c5cf7);
+    background: linear-gradient(135deg, var(--c-primary), var(--c-primary-strong));
     color: #fff;
     font-size: 1rem;
 }

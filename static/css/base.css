@@ -4,21 +4,31 @@
    ========================================================================== */
 
 :root {
-    /* Color system */
-    --c-bg: #f4f6fb;
+    /* Color system — WhatsApp-inspired */
+    --c-bg: #f0f2f5;
     --c-surface: #ffffff;
-    --c-surface-2: #eef1f8;
-    --c-border: #dfe4ef;
-    --c-text: #1c2333;
-    --c-text-muted: #667085;
-    --c-primary: #4f6ef7;
-    --c-primary-strong: #3d5bee;
-    --c-primary-soft: #eef1ff;
-    --c-success: #22c55e;
+    --c-surface-2: #f0f2f5;
+    --c-border: #d1d7db;
+    --c-text: #111b21;
+    --c-text-muted: #667781;
+    --c-primary: #00a884;
+    --c-primary-strong: #008069;
+    --c-primary-soft: #e7f8f1;
+    --c-success: #25d366;
     --c-success-soft: #e9f9ef;
     --c-danger: #ef4444;
     --c-danger-soft: #fdecec;
     --c-warning: #f59e0b;
+
+    /* Chat surface tokens (used by chat.css) */
+    --wa-rail: #ffffff;
+    --wa-rail-text: #54656f;
+    --wa-rail-active: #e7f8f1;
+    --wa-chat-bg: #efeae2;
+    --wa-in: #ffffff;
+    --wa-out: #d9fdd3;
+    --wa-tick: #8696a0;
+    --wa-tick-read: #53bdeb;
 
     /* Typography */
     --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue",
@@ -44,15 +54,24 @@
     --ease: cubic-bezier(0.2, 0.7, 0.3, 1);
 
     /* Dark theme overrides (applied via [data-theme="dark"] on <html>) */
-    --c-bg-dark: #12141c;
-    --c-surface-dark: #1b1e2b;
-    --c-surface-2-dark: #262a3b;
-    --c-border-dark: #333849;
-    --c-text-dark: #e6e9f2;
-    --c-text-muted-dark: #9aa1b5;
-    --c-primary-soft-dark: #2a3352;
+    --c-bg-dark: #0b141a;
+    --c-surface-dark: #202c33;
+    --c-surface-2-dark: #2a3942;
+    --c-border-dark: #2f3b43;
+    --c-text-dark: #e9edef;
+    --c-text-muted-dark: #8696a0;
+    --c-primary-soft-dark: #2a3942;
     --c-danger-soft-dark: #3d2327;
     --c-success-soft-dark: #1d3327;
+
+    --wa-rail-dark: #202c33;
+    --wa-rail-text-dark: #aebac1;
+    --wa-rail-active-dark: #2a3942;
+    --wa-chat-bg-dark: #0b141a;
+    --wa-in-dark: #202c33;
+    --wa-out-dark: #005c4b;
+    --wa-tick-dark: #8696a0;
+    --wa-tick-read-dark: #53bdeb;
 }
 
 html[data-theme="dark"] {
@@ -65,6 +84,14 @@ html[data-theme="dark"] {
     --c-primary-soft: var(--c-primary-soft-dark);
     --c-danger-soft: var(--c-danger-soft-dark);
     --c-success-soft: var(--c-success-soft-dark);
+    --wa-rail: var(--wa-rail-dark);
+    --wa-rail-text: var(--wa-rail-text-dark);
+    --wa-rail-active: var(--wa-rail-active-dark);
+    --wa-chat-bg: var(--wa-chat-bg-dark);
+    --wa-in: var(--wa-in-dark);
+    --wa-out: var(--wa-out-dark);
+    --wa-tick: var(--wa-tick-dark);
+    --wa-tick-read: var(--wa-tick-read-dark);
     --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
     --shadow-md: 0 6px 18px rgba(0, 0, 0, 0.45);
     --shadow-lg: 0 16px 44px rgba(0, 0, 0, 0.55);
@@ -94,7 +121,7 @@ body {
     display: grid;
     place-items: center;
     overflow: hidden;
-    background: #071d22;
+    background: #0b141a;
     color: #f2fffb;
     opacity: 1;
     transition: opacity 420ms var(--ease), visibility 420ms var(--ease);
@@ -110,9 +137,9 @@ body {
     position: absolute;
     inset: -20%;
     background:
-        radial-gradient(circle at 50% 42%, rgba(116, 255, 214, 0.14), transparent 17%),
-        radial-gradient(circle at 15% 85%, rgba(42, 178, 178, 0.18), transparent 28%),
-        radial-gradient(circle at 90% 10%, rgba(79, 110, 247, 0.15), transparent 25%);
+        radial-gradient(circle at 50% 42%, rgba(0, 168, 132, 0.16), transparent 17%),
+        radial-gradient(circle at 15% 85%, rgba(37, 211, 102, 0.14), transparent 28%),
+        radial-gradient(circle at 90% 10%, rgba(0, 128, 105, 0.2), transparent 25%);
     animation: boot-drift 8s ease-in-out infinite alternate;
 }
 
@@ -160,11 +187,10 @@ body {
     width: 5.2rem;
     height: 5.2rem;
     padding: 0.55rem;
-    overflow: hidden;
-    border: 1px solid rgba(201, 255, 238, 0.42);
+    overflow: hidden;        border: 1px solid rgba(201, 255, 238, 0.42);
     border-radius: 1.45rem;
     background: rgba(255, 255, 255, 0.1);
-    box-shadow: 0 0 0 10px rgba(116, 255, 214, 0.05), 0 22px 50px rgba(0, 0, 0, 0.28);
+    box-shadow: 0 0 0 10px rgba(37, 211, 102, 0.06), 0 22px 50px rgba(0, 0, 0, 0.28);
     backdrop-filter: blur(12px);
 }
 
@@ -193,7 +219,7 @@ body {
     width: 0.38rem;
     height: 0.38rem;
     border-radius: 50%;
-    background: #74ffd6;
+    background: #25d366;
     animation: boot-pulse 900ms ease-in-out infinite;
 }
 
@@ -293,7 +319,7 @@ h3 {
     height: 32px;
     object-fit: cover;
     border-radius: var(--radius-sm);
-    background: linear-gradient(135deg, var(--c-primary), #7c5cf7);
+    background: linear-gradient(135deg, var(--c-primary), #25d366);
     box-shadow: var(--shadow-sm);
     flex-shrink: 0;
 }
@@ -680,8 +706,8 @@ h3 {
 
 .message--info {
     background: var(--c-primary-soft);
-    color: #3346b0;
-    border: 1px solid #d8defb;
+    color: #017561;
+    border: 1px solid #b7e8dc;
 }
 
 @keyframes fade-in {
@@ -702,7 +728,7 @@ h3 {
     width: 40px;
     height: 40px;
     border-radius: 50%;
-    background: linear-gradient(135deg, #6a8bff, #9a6cf5);
+    background: linear-gradient(135deg, #00a884, #25d366);
     color: #fff;
     display: grid;
     place-items: center;
@@ -750,7 +776,7 @@ h3 {
 }
 
 .presence-dot--offline {
-    background: #c1c8d4;
+    background: #8696a0;
 }
 
 /* ---------- Badges ---------- */
