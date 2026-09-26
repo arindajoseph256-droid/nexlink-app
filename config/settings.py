@@ -74,6 +74,15 @@ if _render_external_url:
     if _render_external_url not in CSRF_TRUSTED_ORIGINS:
         CSRF_TRUSTED_ORIGINS.append(_render_external_url)
 
+# Freebuff preview sandboxes are HTTPS proxies whose host changes per
+# session; while DEBUG is on, trust them so sign-up/login forms work in
+# the preview without manual configuration.
+if DEBUG:
+    if '.e2b.app' not in ALLOWED_HOSTS:
+        ALLOWED_HOSTS.append('.e2b.app')
+    if 'https://*.e2b.app' not in CSRF_TRUSTED_ORIGINS:
+        CSRF_TRUSTED_ORIGINS.append('https://*.e2b.app')
+
 # Application definition
 
 INSTALLED_APPS = [
