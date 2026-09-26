@@ -1,8 +1,14 @@
+# Render Blueprint for NEXLINK (Django 5 + Channels, served by Daphne via ASGI).
+# Deploy via Render dashboard -> New -> Blueprint, or drive the same resources
+# through the Render API. Web service + free Postgres + free Redis.
 services:
   - type: web
     name: nexlink-app
     runtime: python
     plan: free
+    branch: main
+    autoDeploy: true
+    healthCheckPath: /accounts/login/
     buildCommand: pip install -r requirements.txt && python manage.py collectstatic --noinput && python manage.py migrate
     startCommand: daphne -b 0.0.0.0 -p $PORT config.asgi:application
     envVars:
@@ -10,15 +16,35 @@ services:
         value: "0"
       - key: DJANGO_SECRET_KEY
         generateValue: true
+      - key: PYTHON_VERSION
+        value: "3.10.14"
+      - key: DATABASE_URL
+        fromDatabase:
+          name: nexlink-db
+          property: connectionString
+      - key: CHANNEL_REDIS_URL
+        fromService:
+          type: redis
+          name: nexlink-redis
+          property: connectionString
+      # Fill these with the real *.onrender.com origin after the first deploy
+      # (or when the blueprint is applied interactively).
       - key: DJANGO_ALLOWED_HOSTS
         sync: false
       - key: CSRF_TRUSTED_ORIGINS
         sync: false
       - key: CORS_ALLOWED_ORIGINS
         sync: false
-      - key: DATABASE_URL
-        sync: false
-      - key: CHANNEL_REDIS_URL
-        sync: false
-      - key: DEFAULT_PHONE_REGION
-        value: US
+
+databases:
+  - name: nexlink-db
+    databaseName: nexlink
+    user: nexlink
+    plan: free
+    region: oregon
+
+redis:
+  - name: nexlink-redis
+    plan: free
+    region: oregon
+    maxmemoryPolicy: noeviction
