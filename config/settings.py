@@ -40,25 +40,39 @@ ALLOWED_HOSTS = [
     if host.strip()
 ]
 if DEBUG:
+    # Sandboxed previews and tunnels (e.g. *.e2b.app) expose the app on
+    # arbitrary subdomains, so in development we accept any host. Production
+    # must always set DJANGO_ALLOWED_HOSTS explicitly.
     ALLOWED_HOSTS.append('*')
 
+# Cloud/preview proxies forward the app under a different scheme+host than
+# the local bind. Trust X-Forwarded-Proto so CSRF's origin/referer checks see
+# the externally visible origin, and register forwarded origins (received via
+# DJANGO_CSRF_TRUSTED_ORIGINS) as CSRF-trusted.
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+
+
+def _split_env(name):
+    return [item.strip() for item in os.environ.get(name, '').split(',') if item.strip()]
+
+
+CSRF_TRUSTED_ORIGINS = ['http://localhost:8000', 'http://127.0.0.1:8000']
 CORS_ALLOWED_ORIGINS = [
-    origin.strip()
-    for origin in os.environ.get(
-        'CORS_ALLOWED_ORIGINS',
-        'http://localhost:8081,http://127.0.0.1:8081,http://192.168.1.166:8081,'
-        'http://localhost:19006,http://127.0.0.1:19006,http://192.168.1.166:19006',
-    ).split(',')
-    if origin.strip()
+    'http://localhost:8081', 'http://127.0.0.1:8081', 'http://192.168.1.166:8081',
+    'http://localhost:19006', 'http://127.0.0.1:19006', 'http://192.168.1.166:19006',
 ]
-CORS_ALLOWED_ORIGINS = [
-    origin.strip()
-    for origin in os.environ.get(
-        'CORS_ALLOWED_ORIGINS',
-        ','.join(CORS_ALLOWED_ORIGINS),
-    ).split(',')
-    if origin.strip()
-]
+CSRF_TRUSTED_ORIGINS += _split_env('DJANGO_CSRF_TRUSTED_ORIGINS')
+CORS_ALLOWED_ORIGINS += _split_env('DJANGO_CORS_ALLOWED_ORIGINS')
+
+# Render injects RENDER_EXTERNAL_URL automatically; trust that origin so
+# logins/CSRF work without extra configuration after a deploy.
+_render_external_url = os.environ.get('RENDER_EXTERNAL_URL', '').rstrip('/')
+if _render_external_url:
+    _render_host = urlparse(_render_external_url).hostname
+    if _render_host and _render_host not in ALLOWED_HOSTS:
+        ALLOWED_HOSTS.append(_render_host)
+    if _render_external_url not in CSRF_TRUSTED_ORIGINS:
+        CSRF_TRUSTED_ORIGINS.append(_render_external_url)
 
 # Application definition
 
@@ -123,6 +137,7 @@ CHANNEL_LAYERS = {
 }
 
 # Database: SQLite by default; DATABASE_URL enables PostgreSQL/MySQL deployments.
+
 DATABASE_URL = os.environ.get('DATABASE_URL', '').strip()
 if DATABASE_URL:
     parsed_database = urlparse(DATABASE_URL)
@@ -212,7 +227,6 @@ MEDIA_ROOT = BASE_DIR / 'media'
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # Security hardening (full effect in production when DEBUG=False)
-CSRF_TRUSTED_ORIGINS = ['http://localhost:8000', 'http://127.0.0.1:8000']
 if not DEBUG:
     SECURE_SSL_REDIRECT = True
     SESSION_COOKIE_SECURE = True
@@ -225,15 +239,6 @@ if not DEBUG:
 else:
     # Allow plain-http localhost while keeping CSRF protections active
     pass
-
-CSRF_TRUSTED_ORIGINS = [
-    origin.strip()
-    for origin in os.environ.get(
-        'CSRF_TRUSTED_ORIGINS',
-        ','.join(CSRF_TRUSTED_ORIGINS),
-    ).split(',')
-    if origin.strip()
-]
 
 X_FRAME_OPTIONS = 'DENY'
 SECURE_CONTENT_TYPE_NOSNIFF = True
