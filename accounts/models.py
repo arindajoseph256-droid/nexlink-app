@@ -150,7 +150,7 @@ class UserPreferences(models.Model):
         related_name='preferences',
     )
     theme = models.CharField(max_length=10, default='dark')
-    accent = models.CharField(max_length=9, default='#a78bfa')
+    accent = models.CharField(max_length=9, default='#74ffd6')
     status = models.CharField(
         max_length=12,
         choices=PresenceStatus.choices,

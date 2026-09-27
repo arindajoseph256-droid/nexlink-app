@@ -90,6 +90,19 @@
     }
 
     /* ---------- theme + accent ---------- */
+    /* Default accent follows the active theme: mint on deep teal in dark,
+       brand teal in light — the palette used by the login/register pages. */
+    var DEFAULT_ACCENT = { light: '#00a884', dark: '#74ffd6' };
+    /* Pre-rebrand saved accents (Midnight Violet era) map onto the teal family. */
+    var LEGACY_ACCENT = {
+        '#a78bfa': '#74ffd6', '#8b5cf6': '#00a884', '#ec4899': '#06cf9c',
+        '#f472b6': '#2dd4bf', '#06b6d4': '#06b6a4', '#10b981': '#10b981',
+        '#f59e0b': '#f59e0b', '#ef4444': '#ef4444'
+    };
+    function currentTheme() {
+        var t = document.documentElement.getAttribute('data-theme');
+        return t === 'light' ? 'light' : 'dark';
+    }
     function applyTheme(theme) {
         var resolved = theme;
         if (theme === 'system') {
@@ -97,7 +110,7 @@
         }
         document.documentElement.setAttribute('data-theme', resolved || 'dark');
         var meta = $('meta[name="theme-color"]');
-        if (meta) meta.setAttribute('content', resolved === 'light' ? '#f7f4ee' : '#0a0912');
+        if (meta) meta.setAttribute('content', resolved === 'light' ? '#eef4f1' : '#071d22');
         var icon = $('#themeIconQuick');
         if (icon) {
             icon.innerHTML = resolved === 'dark'
@@ -109,6 +122,7 @@
     }
     function applyAccent(hex) {
         if (!/^#[0-9a-fA-F]{6}$/.test(hex || '')) return;
+        hex = LEGACY_ACCENT[hex.toLowerCase()] || hex;
         document.documentElement.style.setProperty('--accent', hex);
         document.documentElement.style.setProperty('--accent-h', shade(hex, -20));
         document.documentElement.style.setProperty('--accent-2', shade(hex, 25));
@@ -118,6 +132,10 @@
         document.documentElement.style.setProperty('--accent-glow', 'rgba(' + rgb + ',.42)');
         State.prefs.accent = hex;
         storeSet('nexus.accent', hex);
+        var active = document.querySelector('.accent-dot');
+        if (active) {
+            $all('.accent-dot').forEach(function (x) { x.classList.toggle('active', x.dataset.accent === hex); });
+        }
     }
     function hexToRgb(hex) {
         var c = hex.replace('#', '');
@@ -2072,7 +2090,7 @@
                 '<div class="settings-section"><h2>Accent colour</h2><div class="settings-row">' +
                 '<div class="settings-row-info"><div class="lbl">Accent</div><div class="desc">Used for buttons and highlights</div></div>' +
                 '<div class="accent-picker">' +
-                ['#a78bfa', '#ec4899', '#06b6d4', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#f472b6'].map(function (h) {
+                ['#74ffd6', '#00a884', '#06cf9c', '#2dd4bf', '#0ea5e9', '#f59e0b', '#ec4899', '#ef4444'].map(function (h) {
                     return '<div class="accent-dot ' + (prefs.accent === h ? 'active' : '') + '" data-accent="' + h + '" style="background:' + h + '"></div>';
                 }).join('') + '</div></div></div>';
             $('#themeSelect').addEventListener('change', function () {
@@ -2217,7 +2235,7 @@
         cacheUser(State.me);
 
         var savedTheme = storeGet('nexus.theme', State.prefs.theme || 'dark');
-        var savedAccent = storeGet('nexus.accent', State.prefs.accent || '#a78bfa');
+        var savedAccent = storeGet('nexus.accent', State.prefs.accent || DEFAULT_ACCENT[currentTheme()]);
         applyTheme(savedTheme);
         applyAccent(savedAccent);
 
