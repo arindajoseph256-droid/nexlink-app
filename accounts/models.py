@@ -123,8 +123,15 @@ class Profile(models.Model):
 
     @property
     def avatar_url(self):
-        """Picture URL or None so templates can render initials fallback."""
-        return self.picture.url if self.picture else None
+        """Picture URL or None so templates can render initials fallback.
+
+        Points at the authenticated avatar endpoint instead of /media/ so
+        pictures keep working where uploaded media is not served directly
+        (e.g. ephemeral production disks).
+        """
+        if not self.picture:
+            return None
+        return f'/accounts/users/{self.user_id}/avatar/'
 
 
 @receiver(post_save, sender=settings.AUTH_USER_MODEL)

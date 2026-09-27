@@ -199,6 +199,12 @@
         if (user && user.avatar_url) return 'background-image:url(\'' + user.avatar_url + '\')';
         return 'background:' + hueColor(user && user.id);
     }
+    /* Initials avatars always sit on a brand-teal wash so white text and
+       presence dots stay readable; the id only varies the tone. */
+    var AVATAR_HUES = ['#008069', '#0d9488', '#0f766e', '#047857', '#15803d', '#00a884'];
+    function hueColor(id) {
+        return AVATAR_HUES[Math.abs(Number(id) || 0) % AVATAR_HUES.length];
+    }
     function avatarHtml(user, size, opts) {
         opts = opts || {};
         var cls = 'avatar ' + (size || '');
@@ -669,18 +675,14 @@
         var status = mine ? statusIcon(m.state) : '';
         var starIcon = m.starred ? '<span class="starred">' + ICONS.starFill + '</span>' : '';
         var pinIcon = m.pinned ? '<span style="color:var(--accent)">' + ICONS.pin + '</span>' : '';
+        var meta = starIcon + pinIcon + '<span>' + fmtTime(m.ts) + '</span>' +
+            (status ? '<span class="status ' + (m.state === 'read' ? 'read' : '') + '">' + status + '</span>' : '');
         return '<div class="msg-row ' + (mine ? 'out' : 'in') + (isFirst ? ' first' : '') + '" data-msg-id="' + m.id + '">' +
             senderAvatar +
-            '<div class="msg-content"><div class="bubble">' + inner + '</div>' +
+            '<div class="msg-content"><div class="bubble">' + inner +
+            '<div class="msg-meta">' + meta + '</div></div>' +
             reactionsHtml +
-            '<div class="msg-meta">' + starIcon + pinIcon + '<span>' + fmtTime(m.ts) + '</span>' +
-            (status ? '<span class="status ' + (m.state === 'read' ? 'read' : '') + '">' + status + '</span>' : '') +
-            '</div><div class="msg-actions">' +
-            '<button data-action="react" title="React">' + ICONS.heart + '</button>' +
-            '<button data-action="reply" title="Reply">' + ICONS.reply + '</button>' +
-            '<button data-action="star" title="Star">' + (m.starred ? ICONS.starFill : ICONS.star) + '</button>' +
-            '<button data-action="more" title="More">' + ICONS.more + '</button>' +
-            '</div></div></div>';
+            '</div></div>';
     }
 
     function statusIcon(state) {
@@ -1758,11 +1760,12 @@
         if (e.key === 'Escape') closeMenus();
     });
     var SEARCH_DEBOUNCE_MS = 250;
+    var SEARCH_CHEV = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>';
     function openGlobalSearch() {
         var root = $('#modalRoot');
         root.innerHTML = '<div class="modal-back" id="searchBack" style="align-items:flex-start;padding-top:12vh">' +
-            '<div class="modal" style="width:min(560px,100%)"><div class="modal-head" style="padding:12px 16px">' +
-            ICONS.search +
+            '<div class="modal" style="width:min(560px,100%)"><div class="modal-head">' +
+            '<span class="search-ico">' + ICONS.search + '</span>' +
             '<input id="globalSearchInput" placeholder="Search name or phone number…" style="flex:1;background:transparent;border:none;outline:none;font-size:15px;color:var(--text-1);font-family:inherit" />' +
             '<button class="icon-btn" id="searchClose">' + ICONS.x + '</button></div>' +
             '<div class="modal-body" id="searchResults" style="padding:8px"></div></div></div>';
@@ -1780,7 +1783,10 @@
             var q = input.value.trim();
             var box = $('#searchResults');
             if (!box) return;
-            if (q.length < 2) { box.innerHTML = '<div style="padding:14px;color:var(--text-3);font-size:13px">Type at least 2 characters…</div>'; return; }
+            if (q.length < 2) {
+                box.innerHTML = '<div class="search-empty"><div class="hint">Search people by name or phone number…</div></div>';
+                return;
+            }
             API.get('/api/users/search/?q=' + encodeURIComponent(q)).then(function (data) {
                 var results = (data && data.results) || [];
                 if (results.length) {
@@ -1788,7 +1794,8 @@
                         var sub = u.masked_phone || u.about || '';
                         return '<div class="search-result" data-uid="' + u.id + '">' + avatarHtml(u, 'sm') +
                             '<div class="meta"><div class="name">' + esc(u.display_name) + '</div>' +
-                            '<div class="sub">' + esc(sub) + '</div></div></div>';
+                            '<div class="sub">' + esc(sub) + '</div></div>' +
+                            '<span class="chev">' + SEARCH_CHEV + '</span></div>';
                     }).join('');
                 } else {
                     box.innerHTML = phoneFallbackHtml(q);
@@ -1802,8 +1809,7 @@
         }
     }
     function phoneFallbackHtml(q) {
-        return '<div style="padding:16px;text-align:center">' +
-            '<div style="color:var(--text-3);font-size:13px;margin-bottom:10px">No one found for “' + esc(q) + '”.</div>' +
+        return '<div class="search-empty"><div class="hint">No one found for “' + esc(q) + '”.</div>' +
             '<button class="btn btn-outline" id="btnChatByPhone">Chat with a phone number</button></div>';
     }
     function bindSearchResults(close) {
@@ -2119,6 +2125,8 @@
             item.addEventListener('click', function () {
                 $all('.settings-nav-item').forEach(function (x) { x.classList.toggle('active', x === item); });
                 renderSettingsSection(item.dataset.section);
+                var content = $('#settingsContent');
+                if (content) content.scrollTop = 0;
             });
         });
         renderSettingsSection(section);
