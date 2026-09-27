@@ -1757,36 +1757,95 @@
         }
         if (e.key === 'Escape') closeMenus();
     });
+    var SEARCH_DEBOUNCE_MS = 250;
     function openGlobalSearch() {
         var root = $('#modalRoot');
         root.innerHTML = '<div class="modal-back" id="searchBack" style="align-items:flex-start;padding-top:12vh">' +
             '<div class="modal" style="width:min(560px,100%)"><div class="modal-head" style="padding:12px 16px">' +
             ICONS.search +
-            '<input id="globalSearchInput" placeholder="Search people…" style="flex:1;background:transparent;border:none;outline:none;font-size:15px;color:var(--text-1);font-family:inherit" />' +
+            '<input id="globalSearchInput" placeholder="Search name or phone number…" style="flex:1;background:transparent;border:none;outline:none;font-size:15px;color:var(--text-1);font-family:inherit" />' +
             '<button class="icon-btn" id="searchClose">' + ICONS.x + '</button></div>' +
             '<div class="modal-body" id="searchResults" style="padding:8px"></div></div></div>';
         var close = function () { root.innerHTML = ''; };
         $('#searchClose').addEventListener('click', close);
         $('#searchBack').addEventListener('click', function (e) { if (e.target.id === 'searchBack') close(); });
         var input = $('#globalSearchInput');
+        var timer = null;
         input.focus();
         input.addEventListener('input', function () {
+            if (timer) clearTimeout(timer);
+            timer = setTimeout(runSearch, SEARCH_DEBOUNCE_MS);
+        });
+        function runSearch() {
             var q = input.value.trim();
-            if (q.length < 2) { $('#searchResults').innerHTML = '<div style="padding:14px;color:var(--text-3);font-size:13px">Type at least 2 characters…</div>'; return; }
+            var box = $('#searchResults');
+            if (!box) return;
+            if (q.length < 2) { box.innerHTML = '<div style="padding:14px;color:var(--text-3);font-size:13px">Type at least 2 characters…</div>'; return; }
             API.get('/api/users/search/?q=' + encodeURIComponent(q)).then(function (data) {
                 var results = (data && data.results) || [];
-                $('#searchResults').innerHTML = results.length
-                    ? results.map(function (u) {
+                if (results.length) {
+                    box.innerHTML = results.map(function (u) {
+                        var sub = u.masked_phone || u.about || '';
                         return '<div class="search-result" data-uid="' + u.id + '">' + avatarHtml(u, 'sm') +
                             '<div class="meta"><div class="name">' + esc(u.display_name) + '</div>' +
-                            '<div class="sub">' + esc(u.about || '') + '</div></div></div>';
-                    }).join('')
-                    : '<div style="padding:20px;text-align:center;color:var(--text-3);font-size:13px">No people found</div>';
-                $all('#searchResults .search-result').forEach(function (el) {
-                    el.addEventListener('click', function () { startChatWith(Number(el.dataset.uid)); close(); });
-                });
-            }).catch(function () {});
+                            '<div class="sub">' + esc(sub) + '</div></div></div>';
+                    }).join('');
+                } else {
+                    box.innerHTML = phoneFallbackHtml(q);
+                }
+                bindSearchResults(close);
+            }).catch(function () {
+                var box2 = $('#searchResults');
+                if (box2) box2.innerHTML = phoneFallbackHtml(q);
+                bindSearchResults(close);
+            });
+        }
+    }
+    function phoneFallbackHtml(q) {
+        return '<div style="padding:16px;text-align:center">' +
+            '<div style="color:var(--text-3);font-size:13px;margin-bottom:10px">No one found for “' + esc(q) + '”.</div>' +
+            '<button class="btn btn-outline" id="btnChatByPhone">Chat with a phone number</button></div>';
+    }
+    function bindSearchResults(close) {
+        $all('#searchResults .search-result').forEach(function (el) {
+            el.addEventListener('click', function () { startChatWith(Number(el.dataset.uid)); close(); });
         });
+        var phoneBtn = $('#btnChatByPhone');
+        if (phoneBtn) phoneBtn.addEventListener('click', function () { close(); openPhoneChat(); });
+    }
+    function openPhoneChat() {
+        var root = $('#modalRoot');
+        root.innerHTML = '<div class="modal-back" id="phoneBack"><div class="modal" style="width:min(420px,100%)">' +
+            '<div class="modal-head"><h3>New chat by phone</h3><button class="icon-btn" id="phoneClose">' + ICONS.x + '</button></div>' +
+            '<div class="modal-body">' +
+            '<div class="form-row"><label class="form-label">Phone number</label>' +
+            '<input class="form-input" id="phoneChatInput" type="tel" inputmode="tel" autocomplete="off" placeholder="+256 7XX XXX XXX" />' +
+            '<div id="phoneChatError" style="display:none;color:var(--danger);font-size:12.5px;margin-top:6px"></div></div>' +
+            '<p style="color:var(--text-3);font-size:12.5px;margin:0 0 14px">They need a NEXLINK account. Local numbers also work — we add the country code for you.</p>' +
+            '<button class="btn btn-primary" style="width:100%" id="phoneChatGo">Start chat</button>' +
+            '</div></div></div>';
+        var close = function () { root.innerHTML = ''; };
+        $('#phoneClose').addEventListener('click', close);
+        $('#phoneBack').addEventListener('click', function (e) { if (e.target.id === 'phoneBack') close(); });
+        var input = $('#phoneChatInput');
+        var errBox = $('#phoneChatError');
+        var btn = $('#phoneChatGo');
+        input.focus();
+        function showError(msg) { errBox.textContent = msg; errBox.style.display = 'block'; }
+        function submit() {
+            var phone = input.value.trim();
+            if (!phone) { showError('Enter a phone number.'); return; }
+            btn.disabled = true;
+            API.post('/api/chats/by-phone/', { phone: phone }).then(function (conversation) {
+                close();
+                return loadConversations().then(function () { openChat(conversation.id); });
+            }).catch(function (err) {
+                btn.disabled = false;
+                showError(err.message || 'Could not start that chat.');
+            });
+        }
+        btn.addEventListener('click', submit);
+        input.addEventListener('keydown', function (e) { if (e.key === 'Enter') submit(); });
     }
     function startChatWith(userId) {
         API.post('/api/conversations/start/', { user_id: userId }).then(function (conversation) {
@@ -1807,9 +1866,10 @@
                 '<div class="modal-head"><h3>New conversation</h3>' +
                 '<button class="icon-btn" id="newChatClose">' + ICONS.x + '</button></div>' +
                 '<div class="modal-body">' +
-                '<div style="display:flex;gap:8px;margin-bottom:16px">' +
+                '<div style="display:flex;gap:8px;margin-bottom:8px">' +
                 '<button class="btn btn-primary" style="flex:1" id="btnNewGroup">New group</button>' +
                 '<button class="btn btn-outline" style="flex:1" id="btnSearchPeople">Find someone</button></div>' +
+                '<button class="btn btn-outline" style="width:100%;margin-bottom:16px" id="btnPhoneChat">Chat with a phone number</button>' +
                 '<div id="peopleList">' + (people.length ? people.map(function (p) {
                     return '<div class="search-result" data-uid="' + p.id + '">' + avatarHtml(p, 'sm') +
                         '<div class="meta"><div class="name">' + esc(p.display_name) + '</div>' +
@@ -1821,6 +1881,7 @@
             $('#newChatBack').addEventListener('click', function (e) { if (e.target.id === 'newChatBack') close(); });
             $('#btnNewGroup').addEventListener('click', function () { close(); openCreateGroupModal(); });
             $('#btnSearchPeople').addEventListener('click', function () { close(); openGlobalSearch(); });
+            $('#btnPhoneChat').addEventListener('click', function () { close(); openPhoneChat(); });
             $all('#peopleList .search-result').forEach(function (el) {
                 el.addEventListener('click', function () { startChatWith(Number(el.dataset.uid)); close(); });
             });

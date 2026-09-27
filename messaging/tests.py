@@ -10,7 +10,8 @@ from rest_framework.test import APIClient
 
 from . import consumers
 from .models import (
-    BlockedUser, Contact, Conversation, Message, Notification, Reaction, UserReport,
+    BlockedUser, Contact, Conversation, ConversationParticipant, Message,
+    Notification, Reaction, UserReport,
 )
 
 User = get_user_model()
@@ -252,6 +253,30 @@ class UserSearchTests(MessagingTestBase):
         response = self.client.get('/api/users/search/', {'q': 'Known'})
         self.assertEqual(response.data['results'], [])
 
+    def test_search_finds_phone_without_plus_sign(self):
+        """Digits without '+' are read as an international number."""
+        response = self.client.get('/api/users/search/', {'q': '14155551002'})
+        self.assertEqual(response.status_code, 200)
+        ids = [r['id'] for r in response.data['results']]
+        self.assertIn(self.bob.id, ids)
+
+    def test_search_finds_local_format_phone(self):
+        """A local number (no country code) resolves via the default region."""
+        ug_user = User.objects.create_user(
+            phone_number='+256767760376', email='ug@example.com', password='Passw0rd-Long!',
+        )
+        response = self.client.get('/api/users/search/', {'q': '0767760376'})
+        self.assertEqual(response.status_code, 200)
+        ids = [r['id'] for r in response.data['results']]
+        self.assertIn(ug_user.id, ids)
+
+    def test_search_includes_masked_phone(self):
+        response = self.client.get('/api/users/search/', {'q': '+14155551002'})
+        self.assertEqual(
+            response.data['results'][0]['masked_phone'],
+            self.bob.masked_phone,
+        )
+
     def test_search_requires_auth(self):
         client = APIClient()
         response = client.get('/api/users/search/', {'q': 'bob'})
@@ -265,6 +290,60 @@ class UserSearchTests(MessagingTestBase):
         self.assertEqual(response.data['results'], [])
         response = self.client.post('/api/conversations/start/', {'user_id': self.bob.id})
         self.assertEqual(response.status_code, 403)
+
+
+class ChatByPhoneTests(MessagingTestBase):
+    def test_start_chat_by_phone_full_international(self):
+        response = self.client.post('/api/chats/by-phone/', {'phone': '+14155551002'}, format='json')
+        self.assertIn(response.status_code, (200, 201))
+        conversation_id = response.data['id']
+        self.assertTrue(
+            ConversationParticipant.objects.filter(
+                conversation_id=conversation_id,
+                user__in=[self.alice.id, self.bob.id],
+            ).count() == 2,
+        )
+
+    def test_start_chat_by_phone_without_plus(self):
+        response = self.client.post('/api/chats/by-phone/', {'phone': '14155551002'}, format='json')
+        self.assertIn(response.status_code, (200, 201))
+
+    def test_start_chat_by_phone_spaces_ok(self):
+        response = self.client.post('/api/chats/by-phone/', {'phone': '+1 415 555 1002'}, format='json')
+        self.assertIn(response.status_code, (200, 201))
+
+    def test_chat_by_phone_unknown_number_404(self):
+        response = self.client.post('/api/chats/by-phone/', {'phone': '+14155559999'}, format='json')
+        self.assertEqual(response.status_code, 404)
+
+    def test_chat_by_phone_invalid_number_400(self):
+        response = self.client.post('/api/chats/by-phone/', {'phone': '12345'}, format='json')
+        self.assertEqual(response.status_code, 400)
+
+    def test_chat_by_phone_missing_phone_400(self):
+        response = self.client.post('/api/chats/by-phone/', {}, format='json')
+        self.assertEqual(response.status_code, 400)
+
+    def test_chat_by_phone_blocked_403(self):
+        BlockedUser.objects.create(blocker=self.alice, blocked=self.bob)
+        response = self.client.post('/api/chats/by-phone/', {'phone': '+14155551002'}, format='json')
+        self.assertEqual(response.status_code, 403)
+
+    def test_chat_by_phone_own_number_404(self):
+        response = self.client.post('/api/chats/by-phone/', {'phone': '+14155551001'}, format='json')
+        self.assertEqual(response.status_code, 404)
+
+    def test_chat_by_phone_requires_auth(self):
+        client = APIClient()
+        response = client.post('/api/chats/by-phone/', {'phone': '+14155551002'}, format='json')
+        self.assertEqual(response.status_code, 403)
+
+    def test_chat_by_phone_is_idempotent(self):
+        first = self.client.post('/api/chats/by-phone/', {'phone': '+14155551002'}, format='json')
+        second = self.client.post('/api/chats/by-phone/', {'phone': '14155551002'}, format='json')
+        self.assertIn(first.status_code, (200, 201))
+        self.assertEqual(second.status_code, 200)
+        self.assertEqual(first.data['id'], second.data['id'])
 
 
 class ContactAPITests(MessagingTestBase):

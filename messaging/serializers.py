@@ -258,13 +258,17 @@ class UserSearchSerializer(serializers.ModelSerializer):
     display_name = serializers.SerializerMethodField()
     avatar_url = serializers.SerializerMethodField()
     about = serializers.SerializerMethodField()
+    masked_phone = serializers.SerializerMethodField()
 
     class Meta:
         model = User
-        fields = ('id', 'display_name', 'about', 'avatar_url')
+        fields = ('id', 'display_name', 'about', 'avatar_url', 'masked_phone')
 
     def get_display_name(self, obj):
         return obj.get_display_name()
+
+    def get_masked_phone(self, obj):
+        return obj.masked_phone
 
     def get_avatar_url(self, obj):
         profile = getattr(obj, 'profile', None)

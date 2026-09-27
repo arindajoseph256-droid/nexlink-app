@@ -1,4 +1,5 @@
 """DRF API views for conversations, messages, search and receipts."""
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.http import FileResponse
 from django.db.models import Count, OuterRef, Q, Subquery
@@ -309,7 +310,7 @@ def search_users(request):
     display name or first name. Results are capped and never include email
     or the full phone number.
     """
-    from accounts.phones import normalize_e164
+    from accounts.phones import mask_e164, normalize_e164
     from django.core.exceptions import ValidationError
 
     query = (request.query_params.get('q') or '').strip()
@@ -320,14 +321,33 @@ def search_users(request):
 
     # Phone lookup: only when the query looks phone-ish (starts with + or
     # is mostly digits) so typing a name does not hit the phone index.
-    digits_only = query.lstrip('+').replace(' ', '')
+    digits_only = query.lstrip('+')
+    digits_only = ''.join(ch for ch in digits_only if ch.isdigit())
     if query.startswith('+') or (digits_only.isdigit() and len(digits_only) >= 7):
+        candidate_numbers = set()
         try:
-            phone = normalize_e164(query)
+            candidate_numbers.add(normalize_e164(query))
         except ValidationError:
-            phone = None
-        if phone:
-            matched_users = User.objects.filter(phone_number=phone)
+            pass
+        # People type numbers without a country code or without the '+'.
+        # Try both readings: the digits as a local number in the default
+        # region, and the digits as an international number that is only
+        # missing the leading '+'.
+        bare = query.lstrip('+')
+        bare = ''.join(ch for ch in bare if ch.isdigit())
+        for candidate in ('+' + bare, bare):
+            try:
+                candidate_numbers.add(normalize_e164(candidate))
+            except ValidationError:
+                continue
+        if candidate_numbers:
+            matched_users = User.objects.filter(phone_number__in=candidate_numbers)
+        if not matched_users.exists() and len(bare) >= 9:
+            # The number may be local to a region we don't guess right
+            # (e.g. a Ugandan '07…' on a US-default deployment). Fall back
+            # to matching the national-significant digits at the end of
+            # the stored E.164 number.
+            matched_users = User.objects.filter(phone_number__endswith=bare[-9:])
 
     # Email lookup is exact to avoid exposing a broad email directory.
     if not matched_users.exists() and '@' in query:
@@ -485,6 +505,81 @@ def chat_people(request):
     )
     serializer = ChatPeopleSerializer(peers, many=True)
     return Response({'results': serializer.data})
+
+
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+@throttle_classes([ScopedRateThrottle])
+@throttle_scope('search')
+def chat_by_phone(request):
+    """Start (or fetch) a 1:1 chat with the owner of a phone number.
+
+    Mirrors the messaging-app behavior: you can always start a chat by
+    typing someone's number, even if they are not in your contacts. The
+    number is normalized to E.164 (default region for local input) and
+    must belong to a registered, unblocked account.
+    """
+    from accounts.phones import normalize_e164
+    from django.core.exceptions import ValidationError
+
+    raw = (request.data.get('phone') or '').strip()
+    if not raw:
+        return Response(
+            {'detail': 'phone is required.'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    candidates = set()
+    bare = ''.join(ch for ch in raw if ch.isdigit())
+    for candidate in (raw, '+' + bare):
+        try:
+            candidates.add(normalize_e164(candidate))
+        except ValidationError:
+            continue
+    target = None
+    if candidates:
+        target = User.objects.filter(phone_number__in=candidates).exclude(
+            pk=request.user.pk,
+        ).first()
+    if not target and len(bare) >= 9:
+        # Same significant-digits fallback as user search: local formats
+        # (e.g. '07…' on a US-default deployment) still resolve.
+        target = User.objects.filter(phone_number__endswith=bare[-9:]).exclude(
+            pk=request.user.pk,
+        ).first()
+    if not target:
+        if not candidates:
+            return Response(
+                {'detail': 'Enter a valid phone number (including country code, e.g. +1 555 010 1234).'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return Response(
+            {'detail': 'No NEXLINK account uses that number yet.'},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+    if BlockedUser.objects.filter(
+        Q(blocker=request.user, blocked=target)
+        | Q(blocker=target, blocked=request.user),
+    ).exists():
+        return Response(
+            {'detail': 'This user is unavailable.'},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+
+    conversation, created = Conversation.get_or_create_between(request.user, target)
+    if created:
+        conversation.participants.update(is_hidden=False)
+    participant = conversation.participant_for(request.user)
+    participant.is_hidden = False
+    participant.save(update_fields=['is_hidden'])
+
+    conversation.participants_list = list(
+        conversation.participants.select_related('user__profile'),
+    )
+    conversation.last_message_cached = None
+    conversation.viewer_participant = participant
+    serializer = ConversationSerializer(conversation, context={'request': request})
+    return Response(serializer.data, status=status.HTTP_201_CREATED if created else 200)
 
 
 @api_view(['GET'])
