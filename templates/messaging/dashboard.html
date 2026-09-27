@@ -193,11 +193,16 @@ svg{display:block;flex:none}
 .avatar{
   display:grid;place-items:center;
   width:40px;height:40px;border-radius:50%;
-  font-size:14px;font-weight:600;color:var(--accent-text);
+  font-size:14px;font-weight:600;color:#fff;
   letter-spacing:-.01em;flex:none;position:relative;
   background:var(--accent);user-select:none;overflow:hidden;
   box-shadow:inset 0 1px 0 rgba(255,255,255,.20);
 }
+.avatar img,.msg-sender img,.group-avatar i img{
+  position:absolute;inset:0;width:100%;height:100%;
+  object-fit:cover;border-radius:inherit;
+}
+.group-avatar i{position:relative;overflow:hidden}
 .avatar .presence{
   position:absolute;right:-1px;bottom:-1px;
   width:13px;height:13px;border-radius:50%;
@@ -495,7 +500,7 @@ svg{display:block;flex:none}
 .msg-sender{
   width:32px;height:32px;border-radius:50%;
   display:grid;place-items:center;
-  font-size:11px;font-weight:700;color:var(--accent-text);
+  font-size:11px;font-weight:700;color:#fff;
   flex:none;position:relative;
   background-size:cover;background-position:center;
   box-shadow:0 0 0 1px var(--border-2), var(--shadow-1);
@@ -1484,6 +1489,6 @@ window.NEXUS_BOOT = {
 </script>
 <script src="{% static 'js/api.js' %}?v=8"></script>
 <script src="{% static 'js/socket.js' %}?v=8"></script>
-<script src="{% static 'js/nexus.js' %}?v=10"></script>
+<script src="{% static 'js/nexus.js' %}?v=11"></script>
 </body>
 </html>

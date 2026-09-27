@@ -71,16 +71,25 @@ def profile_view(request):
 
 @login_required
 def avatar_view(request, user_id):
-    """Serve an avatar only to authenticated viewers."""
+    """Serve an avatar only to authenticated viewers.
+
+    A missing file (e.g. after a deploy on an ephemeral disk) answers 404
+    so the UI can fall back to initials instead of erroring.
+    """
+    from django.http import Http404
     profile = User.objects.filter(pk=user_id).values_list('profile__picture', flat=True).first()
     if not profile:
-        from django.http import Http404
         raise Http404
     picture = User.objects.get(pk=user_id).profile.picture
     if not picture:
-        from django.http import Http404
         raise Http404
-    return FileResponse(picture.open('rb'), content_type='image/*')
+    try:
+        file_obj = picture.open('rb')
+        file_obj.read(1)
+        file_obj.seek(0)
+    except (FileNotFoundError, OSError, ValueError):
+        raise Http404
+    return FileResponse(file_obj, content_type='image/*')
 
 
 @login_required

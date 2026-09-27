@@ -196,8 +196,11 @@
 
     /* ---------- avatars ---------- */
     function avatarStyle(user) {
-        if (user && user.avatar_url) return 'background-image:url(\'' + user.avatar_url + '\')';
         return 'background:' + hueColor(user && user.id);
+    }
+    function avatarImg(user) {
+        var url = user && user.avatar_url;
+        return url ? '<img src="' + esc(url) + '" alt="" loading="lazy" onerror="this.remove()">' : '';
     }
     /* Initials avatars always sit on a brand-teal wash so white text and
        presence dots stay readable; the id only varies the tone. */
@@ -211,13 +214,13 @@
         var presence = (opts.presence && user && user.is_online)
             ? '<span class="presence"' + (opts.presenceBorder ? ' style="border-color:' + opts.presenceBorder + '"' : '') + '></span>'
             : '';
-        var inner = (user && user.avatar_url) ? '' : esc(initials(user && user.display_name));
-        return '<div class="' + cls + '" data-uid="' + (user ? user.id : '') + '" style="' + avatarStyle(user) + '">' + inner + presence + '</div>';
+        var inner = esc(initials(user && user.display_name));
+        return '<div class="' + cls + '" data-uid="' + (user ? user.id : '') + '" style="' + avatarStyle(user) + '">' + inner + avatarImg(user) + presence + '</div>';
     }
     function senderAvatarHtml(user) {
         if (!user) return '';
         return '<div class="msg-sender" data-uid="' + user.id + '" style="' + avatarStyle(user) + '">' +
-            (user.avatar_url ? '' : esc(initials(user.display_name))) + '</div>';
+            esc(initials(user.display_name)) + avatarImg(user) + '</div>';
     }
     function groupAvatarHtml(group, size) {
         var members = (group && group.participants || []).slice(0, 4);
@@ -225,8 +228,7 @@
             var member = members[i];
             if (!member) return '<i style="background:var(--bg-hover)"></i>';
             var user = State.users[member.id] || member;
-            if (user.avatar_url) return '<i style="background-image:url(\'' + user.avatar_url + '\')"></i>';
-            return '<i style="background:' + hueColor(user.id) + '">' + esc(initials(user.display_name)) + '</i>';
+            return '<i style="background:' + hueColor(user.id) + '">' + esc(initials(user.display_name)) + avatarImg(user) + '</i>';
         }).join('');
         return '<div class="group-avatar ' + (size || '') + '">' + cells + '</div>';
     }
