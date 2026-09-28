@@ -303,3 +303,80 @@ class SecurityTests(TestCase):
     def test_password_is_hashed_not_stored(self):
         self.assertNotEqual(self.user.password, 'Passw0rd-Long!')
         self.assertTrue(self.user.password.startswith(('pbkdf2_', 'argon2', 'bcrypt')))
+
+
+class PushDeviceAPITests(TestCase):
+    """Expo push-token registry endpoints."""
+
+    def _login_user(self):
+        user = User.objects.create_user(
+            phone_number='+14155550700', password='Sup3rSecure!2026',
+        )
+        from rest_framework.authtoken.models import Token
+        token = Token.objects.create(user=user)
+        return user, token.key
+
+    def test_register_requires_auth(self):
+        response = self.client.post(
+            '/api/auth/push/register/', {'token': 'ExponentPushToken[abc]'},
+            content_type='application/json',
+        )
+        self.assertIn(response.status_code, (401, 403))
+
+    def test_register_and_reregister_token(self):
+        _, key = self._login_user()
+        auth = {'HTTP_AUTHORIZATION': f'Token {key}'}
+        response = self.client.post(
+            '/api/auth/push/register/',
+            {'token': 'ExponentPushToken[abc]', 'platform': 'expo'},
+            content_type='application/json', **auth,
+        )
+        self.assertEqual(response.status_code, 200)
+        # same token again → still one row, ownership updated
+        response2 = self.client.post(
+            '/api/auth/push/register/',
+            {'token': 'ExponentPushToken[abc]'},
+            content_type='application/json', **auth,
+        )
+        self.assertEqual(response2.status_code, 200)
+        from accounts.push_models import PushDevice
+        self.assertEqual(PushDevice.objects.filter(token='ExponentPushToken[abc]').count(), 1)
+
+    def test_register_rejects_empty_token(self):
+        _, key = self._login_user()
+        response = self.client.post(
+            '/api/auth/push/register/', {'token': ''},
+            content_type='application/json',
+            HTTP_AUTHORIZATION=f'Token {key}',
+        )
+        self.assertEqual(response.status_code, 400)
+
+    def test_unregister_removes_only_own_token(self):
+        user, key = self._login_user()
+        other_user = User.objects.create_user(
+            phone_number='+14155550701', password='Sup3rSecure!2026',
+        )
+        from rest_framework.authtoken.models import Token
+        other_key = Token.objects.create(user=other_user).key
+        from accounts.push_models import PushDevice
+        PushDevice.objects.create(user=user, token='ExponentPushToken[own]')
+        PushDevice.objects.create(user=other_user, token='ExponentPushToken[other]')
+
+        # cannot remove someone else's token
+        self.client.post(
+            '/api/auth/push/unregister/', {'token': 'ExponentPushToken[other]'},
+            content_type='application/json', HTTP_AUTHORIZATION=f'Token {key}',
+        )
+        self.assertTrue(PushDevice.objects.filter(token='ExponentPushToken[other]').exists())
+
+        self.client.post(
+            '/api/auth/push/unregister/', {'token': 'ExponentPushToken[own]'},
+            content_type='application/json', HTTP_AUTHORIZATION=f'Token {key}',
+        )
+        self.assertFalse(PushDevice.objects.filter(token='ExponentPushToken[own]').exists())
+
+    def test_health_endpoint(self):
+        from django.test import override_settings
+        response = self.client.get('/health/')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()['status'], 'ok')

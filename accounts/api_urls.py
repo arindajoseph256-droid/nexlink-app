@@ -2,7 +2,10 @@
 from django.urls import path
 
 from .api_preferences import avatar_api, me_full_api, preferences_api
-from .api_views import login_api, logout_api, register_api, me_api
+from .api_views import (
+    login_api, logout_api, me_api, push_register_api, push_unregister_api,
+    register_api,
+)
 
 urlpatterns = [
     path('login/', login_api, name='api_login'),
@@ -12,4 +15,6 @@ urlpatterns = [
     path('me/full/', me_full_api, name='api_me_full'),
     path('preferences/', preferences_api, name='api_preferences'),
     path('avatar/', avatar_api, name='api_avatar'),
+    path('push/register/', push_register_api, name='api_push_register'),
+    path('push/unregister/', push_unregister_api, name='api_push_unregister'),
 ]

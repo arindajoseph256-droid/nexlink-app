@@ -9,6 +9,7 @@ from rest_framework.throttling import ScopedRateThrottle
 
 from .forms import RegisterForm
 from .phones import normalize_e164
+from .push_models import PushDevice
 
 User = get_user_model()
 
@@ -74,3 +75,30 @@ def logout_api(request):
 @permission_classes([permissions.IsAuthenticated])
 def me_api(request):
     return Response(_user_payload(request.user))
+
+
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+def push_register_api(request):
+    """Register this device's Expo push token for the signed-in user."""
+    token = (request.data.get('token') or '').strip()
+    if not token or len(token) > 255:
+        return Response(
+            {'detail': 'A push token is required (max 255 chars).'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    platform = (request.data.get('platform') or 'expo').strip()[:16]
+    PushDevice.objects.update_or_create(
+        token=token,
+        defaults={'user': request.user, 'platform': platform},
+    )
+    return Response({'status': 'ok'})
+
+
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+def push_unregister_api(request):
+    """Remove a push token (on logout or token refresh)."""
+    token = (request.data.get('token') or '').strip()
+    PushDevice.objects.filter(token=token, user=request.user).delete()
+    return Response({'status': 'ok'})

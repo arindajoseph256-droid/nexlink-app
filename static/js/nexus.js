@@ -70,6 +70,7 @@
         editingId: null,
         pendingAttachments: [],
         typing: {},             // chatId -> {userId, name}
+        outbox: storeGet('nexus.outbox', []), // messages composed while offline
         messagesLoaded: {},     // chatId -> bool
         notifications: [],
         prefs: (BOOT.me && BOOT.me.preferences) || {},
@@ -633,6 +634,12 @@
                 (new Date(m.ts) - new Date(prev.ts)) <= 5 * 60000;
             html += renderMessage(m, isFirst, isSameSender, chat);
         });
+        State.outbox.filter(function (o) { return String(o.chatId) === String(chat.id); }).forEach(function (o) {
+            html += '<div class="msg-row out queued" data-outbox-id="' + esc(o.id) + '">' +
+                '<div class="msg-content"><div class="bubble"><span>' + esc(o.text) + '</span>' +
+                '<div class="msg-meta"><span>' + fmtTime(o.ts) + '</span>' +
+                '<span class="status">' + ICONS.clock + '</span></div></div></div></div>';
+        });
         if (State.typing[chat.id]) {
             html += '<div class="typing-row"><div class="typing-bubble"><i></i><i></i><i></i></div></div>';
         }
@@ -693,6 +700,8 @@
     }
 
     function statusIcon(state) {
+        if (state === 'queued') return ICONS.clock;
+        if (state === 'failed') return ICONS.xCircle;
         if (state === 'read') return ICONS.checkDouble;
         if (state === 'delivered') return ICONS.checkDouble;
         if (state === 'sent') return ICONS.check;
@@ -718,6 +727,8 @@
         check: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>',
         checkDouble: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 6 8 17 2 11"/><polyline points="22 6 12 17 9 14"/></svg>',
         bellOff: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M13.73 21a2 2 0 0 1-3.46 0"/><path d="M18.63 13A17.89 17.89 0 0 1 18 8"/><path d="M6.26 6.26A5.86 5.86 0 0 0 6 8c0 7-3 9-3 9h14"/><path d="M18 8a6 6 0 0 0-9.33-5"/><line x1="1" y1="1" x2="23" y2="23"/></svg>',
+        clock: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>',
+        xCircle: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>',
         file: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>',
         info: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>',
         x: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>',
@@ -901,6 +912,10 @@
             return;
         }
         if (!text && !State.pendingAttachments.length) return;
+        if (!navigator.onLine && text) {
+            queueOutbox(chat.id, text);
+            return;
+        }
         var payload = { body: text };
         if (State.replyTo) payload.reply_to = State.replyTo.id;
         var send = State.pendingAttachments.length
@@ -2303,6 +2318,96 @@
     /* ============================================================
        BOOT
        ============================================================ */
+    /* ---------- connection state + offline outbox ---------- */
+    var ConnState = { socketUp: false, bannerShown: 'none' };
+
+    function showBanner(kind, text) {
+        var banner = $('#connBanner');
+        if (!banner) return;
+        if (kind === 'none') { banner.hidden = true; banner.className = 'conn-banner'; ConnState.bannerShown = 'none'; return; }
+        banner.hidden = false;
+        banner.className = 'conn-banner ' + kind;
+        banner.innerHTML = '<span class="dot"></span>' + esc(text);
+        ConnState.bannerShown = kind;
+    }
+
+    function effectiveConn() {
+        if (!navigator.onLine) return 'offline';
+        if (!ConnState.socketUp) return 'connecting';
+        return 'none';
+    }
+
+    function refreshConnBanner() {
+        showBanner(effectiveConn(), {
+            offline: 'You are offline — messages will send when you reconnect',
+            connecting: 'Reconnecting…',
+        }[effectiveConn()] || '');
+    }
+
+    function queueOutbox(chatId, text) {
+        State.outbox.push({
+            id: 'o' + Date.now() + Math.random().toString(36).slice(2, 7),
+            chatId: chatId, text: text, ts: new Date().toISOString(),
+        });
+        storeSet('nexus.outbox', State.outbox);
+        var chat = findChat(chatId);
+        if (chat) {
+            chat.lastMessage = { id: null, sender_id: State.me.id, body: text, created_at: new Date().toISOString(), state: 'queued' };
+        }
+        renderMessages();
+        renderConvList();
+        toast('You are offline — message queued');
+    }
+
+    function flushOutbox() {
+        if (!State.outbox.length || !navigator.onLine) return;
+        var pending = State.outbox.splice(0, State.outbox.length);
+        storeSet('nexus.outbox', State.outbox);
+        pending.forEach(function (item) {
+            var payload = { body: item.text };
+            API.post('/api/conversations/' + item.chatId + '/messages/', payload).then(function (created) {
+                var chat = findChat(item.chatId);
+                if (chat && created && created.id) {
+                    chat.messages.push(normalizeMessage(created));
+                    chat.lastMessage = { id: created.id, sender_id: State.me.id, body: created.body, created_at: created.created_at, state: created.state };
+                    renderMessages();
+                    renderConvList();
+                }
+            }).catch(function () {
+                // requeue in front so ordering is preserved
+                State.outbox.unshift(item);
+                storeSet('nexus.outbox', State.outbox);
+            });
+        });
+    }
+
+    window.addEventListener('online', function () {
+        refreshConnBanner();
+        flushOutbox();
+        Socket.connectUser();
+        var chat = activeChat();
+        if (chat) Socket.connect(chat.id);
+    });
+    window.addEventListener('offline', function () {
+        refreshConnBanner();
+    });
+    Socket.on('socket.connected', function () {
+        ConnState.socketUp = true;
+        refreshConnBanner();
+        flushOutbox();
+    });
+    Socket.on('socket.disconnected', function () {
+        ConnState.socketUp = false;
+        refreshConnBanner();
+    });
+
+    /* ---------- PWA ---------- */
+    if ('serviceWorker' in navigator) {
+        window.addEventListener('load', function () {
+            navigator.serviceWorker.register('/service-worker.js').catch(function () { /* PWA is progressive enhancement */ });
+        });
+    }
+
     function boot() {
         if (!State.me || !State.me.id) {
             // Not authenticated: the server redirects, but fail soft here.
@@ -2317,6 +2422,7 @@
         applyAccent(savedAccent);
 
         refreshSelfChrome();
+        refreshConnBanner();
         connectSockets();
         loadConversations().then(function () {
             var initial = BOOT.initialConversationId;

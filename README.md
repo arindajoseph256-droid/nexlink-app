@@ -1,9 +1,12 @@
-# NEXLINK — Real-time Messaging Platform
+# NEXLINK — Real-time Messaging Platform (Web + PWA + Android)
 
 A modern messaging platform built with **Django**, **Django REST Framework**,
 **Django Channels** (WebSockets) and a custom **vanilla HTML/CSS/JS** frontend.
-No frontend framework — everything is server-rendered templates plus modular
-JavaScript.
+One shared backend serves the **website**, the **installable PWA** and the
+**Android app** (Expo/React Native in `mobile-app/`) — same accounts,
+same conversations, same real-time delivery everywhere.
+
+**Version 1.1.0**
 
 ## Features
 
@@ -51,23 +54,86 @@ chat in real time.
 ## Tests
 
 ```bash
-python manage.py test accounts messaging
-# 73 tests covering auth flows, API authorization, models, WebSockets,
-# per-user chat state, preferences and the dashboard page
+python manage.py test
+# 105 tests covering auth flows, API authorization, models, WebSockets,
+# per-user chat state, preferences, calls, media, search and the dashboard
 ```
+
+## PWA (installable web app)
+
+The dashboard is a full Progressive Web App:
+
+- `static/manifest.json` — Nexlink branding, teal theme, maskable icon
+- `static/service-worker.js` — app-shell caching + offline fallback
+  (never caches private `/api/` or `/media/` responses)
+- Install prompt: Chrome/Edge desktop, Android Chrome → “Install app”;
+  iOS Safari → Share → “Add to Home Screen”
+- Offline: cached shell opens, a banner shows **You are offline**, and
+  messages you compose are queued (`nexus.outbox` in localStorage) and sent
+  automatically when the connection returns
+- Connection states render in a banner: Connecting… / Reconnecting… /
+  You are offline / connected (banner hides)
 
 ## Project layout
 
 ```
 manage.py
-config/          settings.py · urls.py · asgi.py (Channels) · wsgi.py
-accounts/        User + Profile + UserPreferences models, auth, preferences/avatar API
-messaging/       Conversation/Message/MessageUserState/Notification models,
-                 DRF views + serializers, WebSocket consumers, Nexus page views
+config/          settings.py · urls.py · asgi.py (Channels) · wsgi.py · health.py
+accounts/        User + Profile + UserPreferences + PushDevice, auth, push registry
+messaging/       Conversation/Message/Call/Notification models, DRF views,
+                 WebSocket consumers, Nexus page views
 templates/       base.html, accounts/*, messaging/dashboard.html
-static/          css/{base,auth,chat}.css · js/{api,socket,nexus,auth}.js
-media/           uploaded profile pictures (dev)
+static/          css/ · js/{api,socket,nexus}.js · manifest.json · service-worker.js
+scripts/         start.sh · setup_mobile.bat · run_mobile.bat · build_apk.bat
+mobile-app/      Expo (React Native) Android client — see below
+media/           uploaded profile pictures (dev only; use object storage in prod)
 ```
+
+## Android app (mobile-app/)
+
+A real Expo (React Native) client — not a WebView wrapper. Same backend,
+same accounts, real-time over WebSockets.
+
+**Features:** login/registration with token persistence (expo-secure-store),
+auto-login, conversation list with unread badges/mute/pin indicators,
+chat with date separators + delivery ticks, pagination (older messages load
+on scroll), image/camera/document attachments, voice notes (record + play),
+typing + presence, connection manager with backoff reconnect, offline
+outbox, push notifications (Expo push), profile editing, settings toggles.
+
+### Run it
+
+```bat
+scripts\setup_mobile.bat     :: one-time: npm install
+scripts\run_mobile.bat       :: Django + Expo dev server, scan QR with Expo Go
+```
+
+Manual: `cd mobile-app && npm install && npx expo start`
+
+### Build the APK
+
+```bat
+scripts\build_apk.bat
+```
+
+This runs `npx eas-cli build --platform android --profile preview` (cloud
+build; free expo.dev account needed) and prints the APK download link.
+Manual equivalent:
+
+```bash
+cd mobile-app
+npx eas-cli build --platform android --profile preview   # .apk
+npx eas-cli build --platform android --profile production # .aab (Play Store)
+```
+
+The APK URL is printed by EAS at the end of the build (it is also visible at
+https://expo.dev → your project → Builds). Install it on the phone by opening
+the link (allow “Install unknown apps” when asked).
+
+**Backend URL:** the app reads `EXPO_PUBLIC_API_URL` (falls back to
+`https://nexlink-app.onrender.com`). For development set it before starting
+Expo, e.g. `set EXPO_PUBLIC_API_URL=http://192.168.1.20:8000` (your PC's LAN
+IP; `10.0.2.2` for the Android emulator).
 
 ## API overview (session-authenticated JSON)
 
@@ -89,7 +155,16 @@ media/           uploaded profile pictures (dev)
 | GET/PATCH | `/api/auth/preferences/` | synced theme/accent/toggles/status |
 | GET/PATCH | `/api/auth/me/full/` | profile + preferences (PATCH updates profile) |
 | POST   | `/api/auth/avatar/` | upload profile picture |
+| POST   | `/api/auth/push/register/` | register Expo push token `{token}` |
+| POST   | `/api/auth/push/unregister/` | remove a push token (logout) |
+| POST   | `/api/chats/by-phone/` | start a chat from a phone number `{phone}` |
+| GET    | `/api/calls/` | call history |
+| GET    | `/health/` | unauthenticated health check (no login needed) |
 | GET    | `/api/notifications/` | recent notifications |
+
+Token auth (mobile): send `Authorization: Token <key>`; obtain the key from
+`/api/auth/login/` or `/api/auth/register/`. WebSockets accept the same token
+via `?token=<key>` for native clients (`accounts/ws_auth.py`).
 
 ## WebSockets
 

@@ -4,11 +4,16 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover" />
 <meta name="theme-color" content="#071d22" />
+<link rel="manifest" href="/static/manifest.json" />
+<link rel="apple-touch-icon" href="/static/images/icon-192.png" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
 <title>NEXLINK</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="{% static 'css/base.css' %}?v=12" />
+<link rel="stylesheet" href="{% static 'css/base.css' %}?v=13" />
 <style>
 /* ============================================================
    PREMIUM TOKENS — Deep Teal / Seafoam
@@ -1237,6 +1242,26 @@ svg{display:block;flex:none}
   }
 }
 .w-full{width:100%}
+
+/* ============================================================
+   CONNECTION STATE BANNER (online/offline/reconnecting)
+   ============================================================ */
+.conn-banner{
+  position:fixed;top:calc(10px + env(safe-area-inset-top,0));left:50%;
+  transform:translateX(-50%);z-index:300;
+  display:flex;align-items:center;gap:8px;
+  padding:8px 16px;border-radius:9999px;
+  font-size:12.5px;font-weight:550;letter-spacing:.01em;
+  box-shadow:var(--shadow-2);animation:toastIn 240ms var(--ease-spring);
+  pointer-events:none;max-width:92vw;
+}
+.conn-banner .dot{width:8px;height:8px;border-radius:50%;background:currentColor;flex:none;animation:pulseDot 1.6s ease-in-out infinite}
+.conn-banner.offline{background:#5f1f1f;color:#fecaca}
+.conn-banner.connecting{background:#3a3321;color:#fde68a}
+.conn-banner.connecting .dot{background:#fde68a}
+.conn-banner.online{background:#0c3b31;color:#6ee7b7;animation:toastIn 240ms var(--ease-spring)}
+.conn-banner.online .dot{background:#6ee7b7;animation:none}
+@keyframes pulseDot{0%,100%{opacity:1}50%{opacity:.35}}
 </style>
 </head>
 <body>
@@ -1481,6 +1506,7 @@ svg{display:block;flex:none}
 <div id="modalRoot"></div>
 <div id="menuRoot"></div>
 <div class="toast-container" id="toastRoot"></div>
+<div class="conn-banner" id="connBanner" hidden></div>
 
 <script>
 window.NEXUS_BOOT = {
@@ -1488,8 +1514,8 @@ window.NEXUS_BOOT = {
   initialConversationId: {{ nexus_initial_conversation_id|default:'null' }}
 };
 </script>
-<script src="{% static 'js/api.js' %}?v=12"></script>
-<script src="{% static 'js/socket.js' %}?v=12"></script>
-<script src="{% static 'js/nexus.js' %}?v=12"></script>
+<script src="{% static 'js/api.js' %}?v=13"></script>
+<script src="{% static 'js/socket.js' %}?v=13"></script>
+<script src="{% static 'js/nexus.js' %}?v=13"></script>
 </body>
 </html>

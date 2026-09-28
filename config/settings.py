@@ -233,6 +233,11 @@ STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 MEDIA_URL = 'media/'
 MEDIA_ROOT = BASE_DIR / 'media'
 
+# Push notifications (Expo). EXPO_ACCESS_TOKEN is optional — tokenless
+# pushes are allowed at lower rates. EXPO_PUSH_URL is for tests.
+EXPO_ACCESS_TOKEN = os.environ.get('EXPO_ACCESS_TOKEN', '').strip() or None
+EXPO_PUSH_URL = os.environ.get('EXPO_PUSH_URL', '').strip() or None
+
 # Default primary key field type
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 

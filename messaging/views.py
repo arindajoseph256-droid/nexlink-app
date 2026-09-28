@@ -9,7 +9,7 @@ from rest_framework.decorators import api_view, permission_classes, throttle_cla
 from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
 
-from accounts.models import Profile
+from accounts.models import Profile, UserPreferences
 
 from .models import (
     BlockedUser,
@@ -233,7 +233,40 @@ class MessageListCreateView(generics.ListCreateAPIView):
             )
             for participant in recipients
         ], ignore_conflicts=True)
+        self._notify_offline(recipients, message)
         self._deliver(message)
+
+    def _notify_offline(self, recipients, message):
+        """Push-notify recipients not currently connected over WebSocket."""
+        from accounts.push import send_push
+
+        offline_ids = [
+            p.user_id for p in recipients
+            if not getattr(p.user, 'profile', None)
+            or not p.user.profile.is_online
+        ]
+        if not offline_ids:
+            return
+        prefs_by_user = {
+            prefs.user_id: prefs
+            for prefs in UserPreferences.objects.filter(user_id__in=offline_ids)
+        }
+        targets = [
+            uid for uid in offline_ids
+            if prefs_by_user.get(uid) is None
+            or prefs_by_user[uid].notifications_enabled
+        ]
+        if not targets:
+            return
+        sender_name = self.request.user.get_display_name()
+        excerpt = (message.body or '').strip()[:180]
+        body_text = excerpt if excerpt else 'Sent you an attachment.'
+        send_push(
+            targets,
+            title=sender_name,
+            body_text=body_text,
+            data={'conversation_id': message.conversation_id},
+        )
 
     def _deliver(self, message):
         """Mark as delivered for online recipients via the channel layer."""

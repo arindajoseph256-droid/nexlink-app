@@ -8,7 +8,7 @@ services:
     plan: free
     branch: main
     autoDeploy: true
-    healthCheckPath: /accounts/login/
+    healthCheckPath: /health/
     buildCommand: pip install -r requirements.txt && python manage.py collectstatic --noinput && python manage.py migrate
     startCommand: daphne -b 0.0.0.0 -p $PORT config.asgi:application
     envVars:
