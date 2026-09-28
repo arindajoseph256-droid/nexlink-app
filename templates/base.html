@@ -7,7 +7,8 @@
     <meta name="theme-color" content="#00a884">
     <link rel="icon" type="image/png" href="{% static 'images/icon.png' %}">
     <link rel="apple-touch-icon" href="{% static 'images/icon.png' %}">
-    <title>{% block title %}NEXLINK{% endblock %}</title>
+    <title>{% block title %}Nexlink{% endblock %}</title>
+    {% block seo_head %}{% endblock %}
     <script>
         /* No-flash: apply stored theme before first paint. */
         (function () {

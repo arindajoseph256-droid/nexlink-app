@@ -1,0 +1,19 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Page not found — Nexlink{% endblock %}
+
+{% block body %}
+<main class="page" style="min-height:70vh;display:flex;align-items:center;justify-content:center;">
+    <section style="text-align:center;max-width:30rem;padding:2rem;">
+        <h1 style="font-family:Georgia,serif;font-weight:400;font-size:2.2rem;margin-bottom:.6rem;">
+            This page wandered off
+        </h1>
+        <p style="color:var(--text-2,#667085);line-height:1.7;margin-bottom:1.4rem;">
+            The page you're looking for doesn't exist or may have moved.
+            Head back to the Nexlink home page to keep chatting.
+        </p>
+        <a class="btn btn--primary" href="/">Go to Nexlink home</a>
+    </section>
+</main>
+{% endblock %}

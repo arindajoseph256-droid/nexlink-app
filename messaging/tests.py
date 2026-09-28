@@ -1,8 +1,10 @@
 """Tests for the messaging app: API authz, conversations, messages, reactions."""
 import asyncio
 import json
+import re
 
 from channels.testing import WebsocketCommunicator
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, TransactionTestCase
@@ -706,11 +708,122 @@ class NexusDashboardPageTests(MessagingTestBase):
         self.assertContains(response, 'nexus.js')
         self.assertContains(response, 'NEXUS_BOOT')
 
-    def test_dashboard_requires_authentication(self):
+    def test_home_is_public_landing_with_seo_meta(self):
         self.client.logout()
         response = self.client.get('/')
+        self.assertEqual(response.status_code, 200)
+        html = response.content.decode()
+        self.assertIn('<h1', html)          # exactly one main heading
+        self.assertEqual(html.count('<h1'), 1)
+        self.assertIn('Nexlink', html)
+        # Indexable landing page: canonical + social metadata, no robots block.
+        self.assertIn('rel="canonical"', html)
+        self.assertIn('og:title', html)
+        self.assertIn('application/ld+json', html)
+        self.assertNotIn('noindex', html)
+
+    def test_chats_requires_authentication(self):
+        self.client.logout()
+        response = self.client.get('/chats/')
         self.assertEqual(response.status_code, 302)
         self.assertIn('/accounts/login/', response.url)
+
+    def test_dashboard_is_noindex_when_signed_in(self):
+        response = self.client.get('/chats/')
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'noindex, nofollow')
+
+    def test_legacy_chat_view_requires_participation(self):
+        conversation, _ = Conversation.get_or_create_between(self.alice, self.bob)
+        response = self.client.get(f'/chat/{conversation.id}/')
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'noindex, nofollow')
+
+        self.client.force_login(self.mallory)
+        response = self.client.get(f'/chat/{conversation.id}/')
+        self.assertEqual(response.status_code, 302)
+
+
+class SEOViewTests(TestCase):
+    """Search-engine surface: landing page metadata, robots.txt, sitemap.xml."""
+
+    def test_home_meta_tags(self):
+        response = self.client.get('/')
+        html = response.content.decode()
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('<title>Nexlink — Modern Messaging &amp; Chat App</title>', html)
+        self.assertIn('name="description"', html)
+        self.assertEqual(html.count('<h1'), 1)
+        self.assertIn('rel="canonical"', html)
+        self.assertIn('og:title', html)
+        self.assertIn('og:site_name" content="Nexlink"', html)
+        self.assertIn('twitter:card', html)
+        self.assertNotIn('noindex', html)
+
+    def test_home_canonical_uses_site_url(self):
+        response = self.client.get('/')
+        html = response.content.decode()
+        self.assertIn(f'rel="canonical" href="{settings.SITE_URL}/"', html)
+
+    def test_home_canonical_in_production(self):
+        """With SITE_URL set (Render), all absolute SEO URLs use it."""
+        from django.test import override_settings
+        with override_settings(SITE_URL='https://nexlink-app.onrender.com'):
+            response = self.client.get('/')
+            html = response.content.decode()
+            self.assertIn('rel="canonical" href="https://nexlink-app.onrender.com/"', html)
+            self.assertIn('og:url" content="https://nexlink-app.onrender.com/"', html)
+            self.assertNotIn('localhost', html)
+            self.assertNotIn('127.0.0.1', html)
+
+    def test_home_json_ld_is_valid(self):
+        response = self.client.get('/')
+        html = response.content.decode()
+        match = re.search(
+            r'<script type="application/ld\+json">(.*?)</script>', html, re.DOTALL,
+        )
+        self.assertIsNotNone(match)
+        data = json.loads(match.group(1))
+        self.assertEqual(data['@type'], 'WebApplication')
+        self.assertEqual(data['name'], 'Nexlink')
+        self.assertEqual(data['url'], settings.SITE_URL + '/')
+        self.assertEqual(data['applicationCategory'], 'CommunicationApplication')
+
+    def test_robots_txt(self):
+        response = self.client.get('/robots.txt')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response['Content-Type'], 'text/plain')
+        body = response.content.decode()
+        self.assertIn('User-agent: *', body)
+        self.assertIn('Allow: /', body)
+        self.assertIn('Disallow: /api/', body)
+        self.assertIn(f'Sitemap: {settings.SITE_URL}/sitemap.xml', body)
+
+    def test_sitemap_xml_lists_only_homepage(self):
+        response = self.client.get('/sitemap.xml')
+        self.assertEqual(response.status_code, 200)
+        body = response.content.decode()
+        self.assertIn('<urlset', body)
+        self.assertIn('<loc>https://testserver/</loc>', body)
+        self.assertNotIn('/accounts/', body)
+        self.assertNotIn('/chats/', body)
+        self.assertNotIn('/api/', body)
+
+    def test_auth_pages_are_noindex(self):
+        for url in (
+            '/accounts/login/', '/accounts/register/',
+            '/accounts/password-reset/',
+        ):  # noqa: B007
+            response = self.client.get(url)
+            self.assertEqual(response.status_code, 200)
+            self.assertIn('noindex, nofollow', response.content.decode())
+
+    def test_404_page_is_branded(self):
+        response = self.client.get('/definitely-not-a-page/')
+        self.assertEqual(response.status_code, 404)
+        html = response.content.decode()
+        self.assertIn('Page not found — Nexlink', html)
+        self.assertIn('Go to Nexlink home', html)
 
 
 class GroupAPITests(MessagingTestBase):

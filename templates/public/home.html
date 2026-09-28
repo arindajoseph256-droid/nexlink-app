@@ -1,0 +1,118 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}{{ seo_title }}{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'css/public.css' %}">
+{% endblock %}
+
+{% block seo_head %}
+<meta name="description" content="{{ seo_description }}">
+{% include 'partials/seo_head.html' %}
+{% endblock %}
+
+{% block body %}
+<main class="public-home">
+    <header class="topbar public-topbar">
+        <a class="topbar__brand" href="/">
+            <img class="topbar__logo" src="{% static 'images/icon.png' %}" alt="Nexlink messaging app logo">
+            <span>Nexlink</span>
+        </a>
+        <nav class="topbar__nav" aria-label="Main navigation">
+            <a href="#features" class="nav-link">Features</a>
+            <a href="#about" class="nav-link">About</a>
+            <a href="{% url 'accounts:login' %}" class="nav-link">Log in</a>
+            <a href="{% url 'accounts:register' %}" class="nav-link nav-link--cta">Create free account</a>
+        </nav>
+    </header>
+
+    <section class="hero" aria-labelledby="hero-title">
+        <div class="hero__copy">
+            <h1 id="hero-title">Nexlink — connect and chat online</h1>
+            <p class="hero__lead">
+                Nexlink is a modern messaging web application for private, real-time
+                conversations. Create a free account, start a chat by phone number and
+                stay close to your people — on your phone or your computer.
+            </p>
+            <div class="hero__actions">
+                <a class="btn btn--primary" href="{% url 'accounts:register' %}">Get started — it's free</a>
+                <a class="btn btn--ghost" href="{% url 'accounts:login' %}">Log in</a>
+            </div>
+            <p class="hero__hint">Looking for Nexlink? Some searches also spell it
+                “Naklink” — you're in the right place.</p>
+        </div>
+        <div class="hero__visual" aria-hidden="true">
+            <div class="hero__card hero__card--one">
+                <img src="{% static 'images/icon-192.png' %}" alt="">
+                <div><strong>Nexlink chat</strong><span>Real-time messages, delivered instantly</span></div>
+            </div>
+            <div class="hero__card hero__card--two">
+                <div><strong>Nexlink web app</strong><span>Same account on phone &amp; desktop</span></div>
+            </div>
+        </div>
+    </section>
+
+    <section id="features" class="public-section" aria-labelledby="features-title">
+        <h2 id="features-title">Everything you need to stay in touch</h2>
+        <div class="feature-grid">
+            <article class="feature">
+                <h3>Private messaging</h3>
+                <p>One-to-one and group conversations with delivery and read receipts, so you always know your message landed.</p>
+            </article>
+            <article class="feature">
+                <h3>Real-time chat</h3>
+                <p>Messages, typing indicators and online presence update instantly over secure web connections — no refreshing.</p>
+            </article>
+            <article class="feature">
+                <h3>Photos, files &amp; voice</h3>
+                <p>Share images, videos, documents and voice messages right inside the conversation.</p>
+            </article>
+            <article class="feature">
+                <h3>Voice &amp; video calls</h3>
+                <p>Start a call from any conversation and talk face to face, straight from your browser.</p>
+            </article>
+            <article class="feature">
+                <h3>Your profile, your rules</h3>
+                <p>Profile pictures, bios and privacy settings like last seen, read receipts and typing indicators.</p>
+            </article>
+            <article class="feature">
+                <h3>Works everywhere</h3>
+                <p>A responsive web app that installs to your home screen and syncs across phone, tablet and desktop.</p>
+            </article>
+        </div>
+    </section>
+
+    <section id="about" class="public-section public-section--alt" aria-labelledby="about-title">
+        <h2 id="about-title">About the Nexlink app</h2>
+        <p>
+            Nexlink (the NexlinkApp) is an online messenger built for people who want a
+            calm, fast chat experience without noise. The Nexlink web app runs in any
+            modern browser, keeps your conversations in sync across devices, and puts
+            privacy controls in your hands: choose who sees your last seen, your online
+            status and your read receipts.
+        </p>
+        <p>
+            Create a free Nexlink account with your phone number, find people by name
+            or number, and start chatting in seconds.
+        </p>
+        <div class="hero__actions">
+            <a class="btn btn--primary" href="{% url 'accounts:register' %}">Join Nexlink</a>
+        </div>
+    </section>
+
+    <footer class="public-footer">
+        <nav aria-label="Footer">
+            <a href="/">Nexlink home</a>
+            <a href="#features">Features</a>
+            <a href="#about">About</a>
+            <a href="{% url 'accounts:login' %}">Log in</a>
+            <a href="{% url 'accounts:register' %}">Register</a>
+        </nav>
+        <p>© {% now "Y" %} Nexlink. The Nexlink messaging app — connect, chat and stay connected online.</p>
+    </footer>
+</main>
+
+{% block extra_js %}{% endblock %}
+<script src="{% static 'js/theme.js' %}" defer></script>
+{% endblock %}

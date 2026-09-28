@@ -1,0 +1,210 @@
+/* ==========================================================================
+   NEXLINK — public landing page (SEO)
+   Brand: deep teal #071d22 · mint #74ffd6 · teal #00a884 · ivory #f2fffb
+   ========================================================================== */
+
+.public-home {
+    min-height: 100vh;
+    background: #071d22;
+    color: #f2fffb;
+    display: flex;
+    flex-direction: column;
+}
+
+.public-topbar {
+    background: rgba(7, 29, 34, 0.85);
+    backdrop-filter: blur(10px);
+    border-bottom: 1px solid rgba(116, 255, 214, 0.14);
+}
+
+.hero {
+    display: grid;
+    grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr);
+    gap: 48px;
+    align-items: center;
+    max-width: 1120px;
+    margin: 0 auto;
+    padding: 88px 24px 64px;
+}
+
+.hero__copy h1 {
+    font-family: Georgia, 'Times New Roman', serif;
+    font-size: clamp(2rem, 4.4vw, 3.1rem);
+    line-height: 1.14;
+    font-weight: 400;
+    letter-spacing: -0.02em;
+    margin-bottom: 18px;
+}
+
+.hero__lead {
+    font-size: 1.06rem;
+    line-height: 1.7;
+    color: rgba(242, 255, 251, 0.78);
+    max-width: 34rem;
+    margin-bottom: 26px;
+}
+
+.hero__actions {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-bottom: 14px;
+}
+
+.hero__hint {
+    font-size: 0.82rem;
+    color: rgba(242, 255, 251, 0.55);
+}
+
+.hero__visual {
+    display: grid;
+    gap: 14px;
+}
+
+.hero__card {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 18px 20px;
+    border-radius: 18px;
+    background: rgba(116, 255, 214, 0.07);
+    border: 1px solid rgba(116, 255, 214, 0.22);
+    box-shadow: 0 18px 40px -24px rgba(0, 0, 0, 0.6);
+}
+
+.hero__card--one img {
+    width: 52px;
+    height: 52px;
+    border-radius: 14px;
+    flex: none;
+}
+
+.hero__card strong {
+    display: block;
+    font-size: 0.98rem;
+    letter-spacing: 0.01em;
+}
+
+.hero__card span {
+    font-size: 0.85rem;
+    color: rgba(242, 255, 251, 0.66);
+}
+
+.hero__card--two {
+    margin-left: 34px;
+    background: rgba(0, 168, 132, 0.12);
+    border-color: rgba(0, 168, 132, 0.35);
+}
+
+.public-section {
+    max-width: 1120px;
+    margin: 0 auto;
+    padding: 64px 24px;
+    width: 100%;
+}
+
+.public-section--alt {
+    border-top: 1px solid rgba(116, 255, 214, 0.1);
+    border-bottom: 1px solid rgba(116, 255, 214, 0.1);
+    background: rgba(0, 168, 132, 0.05);
+}
+
+.public-section h2 {
+    font-family: Georgia, 'Times New Roman', serif;
+    font-weight: 400;
+    font-size: clamp(1.5rem, 3vw, 2.1rem);
+    margin-bottom: 10px;
+}
+
+.public-section--alt p {
+    color: rgba(242, 255, 251, 0.8);
+    line-height: 1.75;
+    max-width: 46rem;
+    margin-bottom: 12px;
+}
+
+.public-section--alt .hero__actions {
+    margin-top: 20px;
+}
+
+.feature-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 16px;
+    margin-top: 28px;
+}
+
+.feature {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(116, 255, 214, 0.14);
+    border-radius: 16px;
+    padding: 22px;
+}
+
+.feature h3 {
+    font-size: 1.02rem;
+    margin-bottom: 8px;
+    color: #74ffd6;
+}
+
+.feature p {
+    font-size: 0.92rem;
+    line-height: 1.65;
+    color: rgba(242, 255, 251, 0.72);
+}
+
+.public-footer {
+    margin-top: auto;
+    border-top: 1px solid rgba(116, 255, 214, 0.12);
+    padding: 30px 24px 40px;
+    text-align: center;
+}
+
+.public-footer nav {
+    display: flex;
+    gap: 22px;
+    justify-content: center;
+    flex-wrap: wrap;
+    margin-bottom: 14px;
+}
+
+.public-footer a {
+    color: rgba(242, 255, 251, 0.75);
+    text-decoration: none;
+    font-size: 0.9rem;
+}
+
+.public-footer a:hover {
+    color: #74ffd6;
+}
+
+.public-footer p {
+    font-size: 0.82rem;
+    color: rgba(242, 255, 251, 0.45);
+}
+
+.btn--ghost {
+    border: 1px solid rgba(116, 255, 214, 0.4);
+    color: #74ffd6;
+    background: transparent;
+}
+
+.btn--ghost:hover {
+    background: rgba(116, 255, 214, 0.1);
+}
+
+@media (max-width: 860px) {
+    .hero {
+        grid-template-columns: 1fr;
+        padding-top: 56px;
+        gap: 34px;
+    }
+
+    .hero__visual {
+        display: none;
+    }
+
+    .topbar__nav .nav-link:not(.nav-link--cta) {
+        display: none;
+    }
+}

@@ -34,18 +34,35 @@ def _nexus_context(request, initial_conversation_id=None):
     }
 
 
+def home(request):
+    """Root page: public SEO landing for visitors, dashboard for users."""
+    if request.user.is_authenticated:
+        return dashboard(request)
+    from config.seo import home_meta
+
+    context = home_meta(request)
+    return render(request, 'public/home.html', context)
+
+
 @login_required
-def conversations_redirect(request):
-    """Root: open the dashboard (optionally deep-linked to one conversation)."""
+def dashboard(request, initial_conversation_id=None):
+    """Authenticated chat dashboard (private — never indexed)."""
     raw = request.GET.get('c')
-    initial_id = None
+    initial_id = initial_conversation_id
     if raw and str(raw).isdigit():
         conversation = Conversation.objects.filter(
             participants__user=request.user, pk=raw,
         ).first()
         if conversation:
             initial_id = conversation.pk
-    return render(request, 'messaging/dashboard.html', _nexus_context(request, initial_id))
+    context = _nexus_context(request, initial_id)
+    context['seo_noindex'] = True
+    return render(request, 'messaging/dashboard.html', context)
+
+
+def conversations_redirect(request):
+    """Backwards-compatible alias for the authenticated dashboard."""
+    return dashboard(request)
 
 
 @login_required
@@ -57,7 +74,9 @@ def chat_view(request, conversation_id):
     ).first()
     if not conversation:
         return redirect('messaging:conversations')
-    return render(
-        request, 'messaging/dashboard.html',
-        _nexus_context(request, conversation.pk),
-    )
+    return dashboard(request, conversation.pk)
+
+
+def page_not_found(request, exception=None):
+    """Branded 404 page (registered as handler404 in config/urls.py)."""
+    return render(request, '404.html', status=404)

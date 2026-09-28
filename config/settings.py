@@ -93,6 +93,7 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'django.contrib.sitemaps',
     'corsheaders',
     'rest_framework',
     'rest_framework.authtoken',
@@ -237,6 +238,24 @@ MEDIA_ROOT = BASE_DIR / 'media'
 # pushes are allowed at lower rates. EXPO_PUSH_URL is for tests.
 EXPO_ACCESS_TOKEN = os.environ.get('EXPO_ACCESS_TOKEN', '').strip() or None
 EXPO_PUSH_URL = os.environ.get('EXPO_PUSH_URL', '').strip() or None
+
+# SEO: absolute site URL used for canonical links, Open Graph, sitemap and
+# robots.txt. Derive a safe default from CSRF/allowed-hosts configuration.
+SITE_URL = os.environ.get('SITE_URL', '').strip().rstrip('/')
+if not SITE_URL:
+    _seo_origin = ''
+    for _origin in CSRF_TRUSTED_ORIGINS:
+        # Skip wildcard origins (e.g. https://*.sandbox.example): a literal
+        # '*' would produce an invalid canonical URL.
+        if _origin.startswith('https://') and '*' not in _origin:
+            _seo_origin = _origin
+            break
+    SITE_URL = _seo_origin or 'http://127.0.0.1:8000'
+
+# Google Search Console verification token (optional). Set the env var to the
+# "google-site-verification" content value from Search Console; it renders as
+# <meta name="google-site-verification" content="..."> on public pages.
+GOOGLE_SITE_VERIFICATION = os.environ.get('GOOGLE_SITE_VERIFICATION', '').strip()
 
 # Default primary key field type
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'

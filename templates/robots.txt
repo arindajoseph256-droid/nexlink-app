@@ -1,0 +1,9 @@
+User-agent: *
+Allow: /
+Disallow: /api/
+Disallow: /admin/
+Disallow: /accounts/profile/
+Disallow: /accounts/settings/
+Disallow: /chat/
+
+Sitemap: {{ sitemap_url }}

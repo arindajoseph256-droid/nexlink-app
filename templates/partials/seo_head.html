@@ -1,0 +1,19 @@
+{% load static %}
+{% if seo_title %}<meta property="og:title" content="{{ seo_title }}">
+{% else %}<meta property="og:title" content="Nexlink">{% endif %}
+<meta property="og:site_name" content="Nexlink">
+<meta property="og:type" content="website">
+{% if seo_description %}<meta property="og:description" content="{{ seo_description }}">
+{% else %}<meta property="og:description" content="Nexlink is a modern messaging and chat web app for private, real-time conversations.">{% endif %}
+{% if seo_url %}<meta property="og:url" content="{{ seo_url }}">{% endif %}
+{% if seo_image %}<meta property="og:image" content="{{ seo_image }}">{% endif %}
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="{{ seo_title|default:'Nexlink' }}">
+<meta name="twitter:description" content="{{ seo_description|default:'Nexlink is a modern messaging and chat web app for private, real-time conversations.' }}">
+{% if seo_image %}<meta name="twitter:image" content="{{ seo_image }}">{% endif %}
+{% if seo_canonical %}<link rel="canonical" href="{{ seo_canonical }}">{% endif %}
+{% if seo_noindex %}<meta name="robots" content="noindex, nofollow">{% endif %}
+{% if seo_google_verification %}<meta name="google-site-verification" content="{{ seo_google_verification }}">{% endif %}
+{% if seo_json_ld %}
+<script type="application/ld+json">{{ seo_json_ld|safe }}</script>
+{% endif %}
