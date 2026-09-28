@@ -257,6 +257,9 @@ if not SITE_URL:
 # <meta name="google-site-verification" content="..."> on public pages.
 GOOGLE_SITE_VERIFICATION = os.environ.get('GOOGLE_SITE_VERIFICATION', '').strip()
 
+# Bing Webmaster Tools verification token (optional, same mechanism).
+BING_SITE_VERIFICATION = os.environ.get('BING_SITE_VERIFICATION', '').strip()
+
 # Default primary key field type
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 

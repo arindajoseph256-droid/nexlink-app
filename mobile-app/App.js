@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Linking,
   Alert,
   FlatList,
   Image,
@@ -18,24 +19,36 @@ import {
 } from 'react-native';
 import {
   createGroup,
+  clearChat,
   connectionState,
+  deleteMessage,
+  deleteMessageForMe,
+  editMessage,
   getChatPeople,
   getConversations,
   getMessages,
+  getNotifications,
   getOlderMessages,
   getAuthToken,
+  leaveGroup,
   loadAuthToken,
   login,
   logout,
+  markNotificationsRead,
   markRead,
+  pinMessage,
   register,
   registerPushToken,
   searchUsers,
   sendMessage,
   sendAttachment,
   setAuthToken,
+  setConversationState,
+  starMessage,
   startConversation,
   startConversationByPhone,
+  toggleBlockUser,
+  toggleReaction,
   unregisterPushToken,
   getMe,
   updateProfile,
@@ -56,6 +69,7 @@ let ExpoAv = null;
 try { ExpoAv = require('expo-av'); } catch {}
 
 const nexlinkIcon = require('./assets/icon.png');
+import { API_BASE_URL } from './api';
 
 const OUTBOX_KEY = 'nexlink.outbox.v1';
 
@@ -292,18 +306,36 @@ function AuthScreen({ onAuthenticated }) {
               {mode === 'login' ? 'New to Nexlink? Create an account' : 'Already have an account? Log in'}
             </Text>
           </TouchableOpacity>
+          {mode === 'login' && (
+            <TouchableOpacity onPress={openResetPage}>
+              <Text style={styles.resetLink}>Forgot password?</Text>
+            </TouchableOpacity>
+          )}
         </View>
       </ScrollView>
     </SafeAreaView>
   );
 }
 
+function openResetPage() {
+  const url = `${API_BASE_URL}/accounts/password-reset/`;
+  if (Platform.OS === 'web' && typeof window !== 'undefined') window.open(url, '_blank');
+  else Linking.openURL(url).catch(() => {});
+}
+
 /* ------------------------------------------------------------------ */
 /* Conversation list                                                  */
 /* ------------------------------------------------------------------ */
+function peerOf(conversation, currentUser) {
+  return conversation?.kind === 'dm'
+    ? conversation.participants?.find((person) => person.id !== currentUser?.id) || null
+    : null;
+}
+
 function ConversationList({
   user, conversations, onOpen, onLogout, onProfile, searchResults,
   onStart, onGroup, onPhoneChat, isWide, connOnline,
+  notifCount, onNotifications, onConversationsChanged, onChatState,
 }) {
   const [query, setQuery] = useState('');
 
@@ -329,6 +361,14 @@ function ConversationList({
               {connOnline ? 'connected' : 'offline'}
             </Text>
           </View>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.iconButton} onPress={onNotifications}>
+          <Text style={styles.iconText}>🔔</Text>
+          {notifCount > 0 && (
+            <View style={styles.notifBadge}>
+              <Text style={styles.notifBadgeText}>{notifCount > 9 ? '9+' : notifCount}</Text>
+            </View>
+          )}
         </TouchableOpacity>
         <TouchableOpacity style={styles.iconButton} onPress={onGroup}>
           <Text style={styles.iconText}>◎</Text>
@@ -380,7 +420,19 @@ function ConversationList({
           const preview = last?.is_deleted ? 'Message deleted' : (last?.body || (last?.attachment_name ? `📎 ${last.attachment_name}` : 'No messages yet'));
 
           return (
-            <TouchableOpacity style={styles.conversation} onPress={() => onOpen(item)}>
+            <TouchableOpacity
+              style={styles.conversation}
+              onPress={() => onOpen(item)}
+              onLongPress={() => {
+                Alert.alert(name, undefined, [
+                  { text: item.pinned ? '📌 Unpin chat' : '📌 Pin chat', onPress: () => onChatState(item, 'pinned', !item.pinned) },
+                  { text: item.muted ? '🔇 Unmute' : '🔇 Mute', onPress: () => onChatState(item, 'muted', !item.muted) },
+                  { text: item.archived ? '📤 Unarchive' : '🗄 Archive', onPress: () => onChatState(item, 'archived', !item.archived) },
+                  { text: '🧹 Clear my view', style: 'destructive', onPress: () => onChatState(item, 'clear') },
+                  { text: 'Cancel', style: 'cancel' },
+                ]);
+              }}
+            >
               <Avatar name={name} color={item.kind === 'group' ? '#f6c86b' : '#7dd3fc'} uri={item.kind === 'group' ? null : peer?.avatar_url} size={44} online={item.kind === 'dm' ? peer?.is_online : null} />
               <View style={styles.conversationBody}>
                 <View style={styles.row}>
@@ -447,7 +499,7 @@ function VoiceNote({ uri }) {
 /* ------------------------------------------------------------------ */
 /* Chat screen                                                        */
 /* ------------------------------------------------------------------ */
-function ChatScreen({ user, conversation, onBack, isWide, onConversationsChanged }) {
+function ChatScreen({ user, conversation, onBack, isWide, onConversationsChanged, onChatAction }) {
   const [messages, setMessages] = useState([]);
   const [hasMore, setHasMore] = useState(false);
   const [loadingOlder, setLoadingOlder] = useState(false);
@@ -460,6 +512,8 @@ function ChatScreen({ user, conversation, onBack, isWide, onConversationsChanged
   const [recording, setRecording] = useState(null);
   const [connOnline, setConnOnline] = useState(true);
   const [queue, setQueue] = useState([]);
+  const [replyTo, setReplyTo] = useState(null);
+  const [editing, setEditing] = useState(null);
   const socketRef = useRef(null);
   const retryRef = useRef(0);
   const retryTimer = useRef(null);
@@ -555,6 +609,17 @@ function ChatScreen({ user, conversation, onBack, isWide, onConversationsChanged
           setMessages((current) => current.map((m) => (m.id === payload.message.id ? { ...m, body: payload.message.body, edited_at: payload.message.edited_at } : m)));
         } else if (payload.type === 'message.deleted' && payload.message_id) {
           setMessages((current) => current.map((m) => (m.id === payload.message_id ? { ...m, is_deleted: true } : m)));
+        } else if (payload.type === 'reaction.updated' && payload.message_id) {
+          setMessages((current) => current.map((m) => {
+            if (m.id !== payload.message_id) return m;
+            const reactions = (m.reactions || []).filter((r) => r.emoji !== payload.emoji);
+            if (payload.added) {
+              reactions.push({
+                emoji: payload.emoji, count: 1, users: [payload.user_id],
+              });
+            }
+            return { ...m, reactions };
+          }));
         } else if (payload.type === 'typing.event') {
           if (payload.user_id && payload.user_id !== user.id) {
             setPeerTyping(!!payload.is_typing);
@@ -639,18 +704,87 @@ function ChatScreen({ user, conversation, onBack, isWide, onConversationsChanged
     const text = body.trim();
     if (!text) return;
     setBody('');
+    if (editing) {
+      const target = editing;
+      setEditing(null);
+      try {
+        const updated = await editMessage(target.id, text);
+        setMessages((current) => current.map((m) => (m.id === updated.id ? updated : m)));
+      } catch (err) {
+        setError(err.message);
+        setBody(text);
+        setEditing(target);
+      }
+      return;
+    }
+    const activeReply = replyTo;
+    setReplyTo(null);
     if (!connOnline) {
       queueMessage(text);
       return;
     }
     try {
-      const message = await sendMessage(conversation.id, text);
+      const message = await sendMessage(conversation.id, text, activeReply?.id || null);
       setMessages((current) => sortMessages([...current, message]));
       onConversationsChanged?.();
     } catch (err) {
       if (/internet|reach/i.test(err.message)) queueMessage(text);
       else setError(err.message);
     }
+  }
+
+  async function runMessageAction(message, action) {
+    try {
+      if (action === 'react') {
+        await toggleReaction(message.id, '❤️');
+      } else if (action === 'star') {
+        const res = await starMessage(message.id);
+        setMessages((current) => current.map((m) => (m.id === message.id ? { ...m, starred: res.starred } : m)));
+      } else if (action === 'pin') {
+        const res = await pinMessage(message.id);
+        setMessages((current) => current.map((m) => (m.id === message.id ? { ...m, pinned: res.pinned } : m)));
+      } else if (action === 'copy') {
+        if (Platform.OS === 'web' && navigator?.clipboard) navigator.clipboard.writeText(message.body);
+        else Alert.alert('Copied', 'Message text copied.');
+      }
+    } catch (err) {
+      setError(err.message);
+    }
+  }
+
+  function longPressMessage(message) {
+    if (message.pending || message.is_deleted) return;
+    const mine = message.sender?.id === user.id;
+    const options = [
+      { text: '❤️ React', onPress: () => runMessageAction(message, 'react') },
+      { text: '↩ Reply', onPress: () => setReplyTo(message) },
+      { text: message.starred ? '☆ Unstar' : '★ Star', onPress: () => runMessageAction(message, 'star') },
+      { text: message.pinned ? 'Unpin' : '📌 Pin', onPress: () => runMessageAction(message, 'pin') },
+    ];
+    if (message.body) {
+      options.push({ text: 'Copy', onPress: () => runMessageAction(message, 'copy') });
+    }
+    if (mine) {
+      options.push(
+        { text: '✎ Edit', onPress: () => { setEditing(message); setBody(message.body || ''); } },
+        { text: 'Delete for everyone', style: 'destructive', onPress: async () => {
+          try {
+            await deleteMessage(message.id);
+            setMessages((current) => current.map((m) => (m.id === message.id ? { ...m, is_deleted: true } : m)));
+          } catch (err) { setError(err.message); }
+        } },
+      );
+    }
+    options.push(
+      { text: 'Delete for me', style: 'destructive', onPress: async () => {
+        try {
+          await deleteMessageForMe(message.id);
+          setMessages((current) => current.filter((m) => m.id !== message.id));
+        } catch (err) { setError(err.message); }
+      } },
+      { text: 'Cancel', style: 'cancel' },
+    );
+    Alert.alert(message.sender?.display_name || 'Message', undefined, options);
   }
 
   async function pickImage(fromCamera) {
@@ -730,23 +864,6 @@ function ChatScreen({ user, conversation, onBack, isWide, onConversationsChanged
     }
   }
 
-  function longPressMessage(message) {
-    const options = [];
-    if (message.body && !message.is_deleted) options.push('Copy text');
-    options.push('Reply info', 'Cancel');
-    Alert.alert(
-      message.sender?.display_name || 'Message',
-      message.is_deleted ? 'This message was deleted' : (message.body || message.attachment_name || 'Attachment'),
-      [
-        ...(message.body && !message.is_deleted ? [{ text: 'Copy', onPress: () => {
-          if (Platform.OS === 'web' && navigator?.clipboard) navigator.clipboard.writeText(message.body);
-          else Alert.alert('Copied', 'Message text copied.');
-        } }] : []),
-        { text: 'Cancel', style: 'cancel' },
-      ],
-    );
-  }
-
   function tick(state, pending) {
     if (pending) return '◷';
     if (state === 'read') return '✓✓';
@@ -760,6 +877,7 @@ function ChatScreen({ user, conversation, onBack, isWide, onConversationsChanged
     const prev = messages[index - 1];
     const showDay = !prev || new Date(prev.created_at || prev.queued_at).toDateString() !== new Date(item.created_at || item.queued_at).toDateString();
     const showSender = conversation.kind === 'group' && !mine && (!prev || prev.sender?.id !== item.sender?.id);
+    const reactions = Array.isArray(item.reactions) ? item.reactions.filter((r) => r && r.count > 0) : [];
 
     return (
       <View>
@@ -768,10 +886,19 @@ function ChatScreen({ user, conversation, onBack, isWide, onConversationsChanged
         )}
         {showSender && <Text style={styles.senderName}>{item.sender?.display_name}</Text>}
         <Pressable onLongPress={() => longPressMessage(item)} style={[styles.message, mine ? styles.mine : styles.theirs]}>
+          {item.pinned ? <Text style={styles.flagRow}>📌</Text> : null}
           {item.is_deleted ? (
             <Text style={[mine ? styles.mineText : styles.theirsText, styles.deletedText]}><Text>🚫 </Text>Message deleted</Text>
           ) : (
             <>
+              {item.reply_to && (
+                <View style={[styles.replyBox, mine && styles.replyBoxMine]}>
+                  <Text style={styles.replyName}>{item.reply_to.sender_name}</Text>
+                  <Text style={styles.replyBody} numberOfLines={2}>
+                    {item.reply_to.is_deleted ? 'Message deleted' : (item.reply_to.body || 'Attachment')}
+                  </Text>
+                </View>
+              )}
               {item.attachment_url && item.message_type === 'image' && (
                 <Image source={{ uri: item.attachment_url }} style={styles.attachImage} />
               )}
@@ -791,9 +918,20 @@ function ChatScreen({ user, conversation, onBack, isWide, onConversationsChanged
             <Text style={mine ? styles.mineTime : styles.theirsTime}>
               {fmtTime(item.created_at || item.queued_at)}
             </Text>
+            {item.starred ? <Text style={styles.flagRow}>★</Text> : null}
             {mine && <Text style={styles.tick}>{tick(item.state, item.pending)}</Text>}
           </View>
         </Pressable>
+        {reactions.length > 0 && (
+          <View style={[styles.reactionsRow, mine ? styles.reactionsMine : styles.reactionsTheirs]}>
+            {reactions.map((r) => (
+              <View key={r.emoji} style={styles.reactionPill}>
+                <Text style={styles.reactionEmoji}>{r.emoji}</Text>
+                <Text style={styles.reactionCount}>{r.count}</Text>
+              </View>
+            ))}
+          </View>
+        )}
       </View>
     );
   };
@@ -816,6 +954,28 @@ function ChatScreen({ user, conversation, onBack, isWide, onConversationsChanged
               : peer?.is_online ? 'online' : peer?.last_seen ? `last seen ${fmtDay(peer.last_seen)}` : 'offline'}
           </Text>
         </View>
+        <TouchableOpacity
+          style={styles.iconButton}
+          onPress={() => {
+            const items = [
+              { text: conversation.pinned ? 'Unpin chat' : '📌 Pin chat', onPress: () => onChatAction('pin') },
+              { text: conversation.muted ? 'Unmute' : '🔇 Mute', onPress: () => onChatAction('mute') },
+              { text: conversation.archived ? 'Unarchive' : '🗄 Archive', onPress: () => onChatAction('archive') },
+              { text: '🧹 Clear my view', style: 'destructive', onPress: () => onChatAction('clear') },
+            ];
+            if (conversation.kind === 'group') {
+              items.push({ text: 'Leave group', style: 'destructive', onPress: () => onChatAction('leave') });
+            } else if (peer) {
+              items.push(
+                { text: 'Block user', style: 'destructive', onPress: () => onChatAction('block') },
+              );
+            }
+            items.push({ text: 'Cancel', style: 'cancel' });
+            Alert.alert(title, undefined, items);
+          }}
+        >
+          <Text style={styles.iconText}>⋮</Text>
+        </TouchableOpacity>
       </View>
 
       {!connOnline && (
@@ -824,6 +984,20 @@ function ChatScreen({ user, conversation, onBack, isWide, onConversationsChanged
         </View>
       )}
       <ErrorText message={error} />
+
+      {(replyTo || editing) && (
+        <View style={[styles.composerBar, styles.replyBar]}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.replyName}>{editing ? 'Editing message' : `Reply to ${replyTo.sender?.display_name || 'message'}`}</Text>
+            <Text style={styles.replyBody} numberOfLines={1}>
+              {editing ? editing.body : (replyTo.body || replyTo.attachment_name || 'Attachment')}
+            </Text>
+          </View>
+          <TouchableOpacity onPress={() => { setReplyTo(null); setEditing(null); setBody(''); }}>
+            <Text style={styles.backText}>✕</Text>
+          </TouchableOpacity>
+        </View>
+      )}
 
       <FlatList
         data={[...queue, ...messages]}
@@ -864,6 +1038,56 @@ function ChatScreen({ user, conversation, onBack, isWide, onConversationsChanged
         )}
       </View>
     </SafeAreaView>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Notifications                                                       */
+/* ------------------------------------------------------------------ */
+function NotificationsModal({ onClose, onOpened }) {
+  const [items, setItems] = useState(null);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    getNotifications()
+      .then((data) => setItems(data.results || []))
+      .catch((err) => setError(err.message));
+  }, []);
+
+  async function markAll() {
+    try {
+      await markNotificationsRead();
+      setItems((current) => (current || []).map((n) => ({ ...n, is_read: true })));
+      onOpened?.();
+    } catch (err) {
+      setError(err.message);
+    }
+  }
+
+  return (
+    <View style={styles.modalBack}>
+      <View style={styles.modalCard}>
+        <Text style={styles.cardTitle}>Notifications</Text>
+        <ErrorText message={error} />
+        {!items ? <ActivityIndicator style={{ margin: 20 }} /> : (
+          <ScrollView style={styles.memberList}>
+            {items.length === 0 && <Text style={styles.empty}>You're all caught up.</Text>}
+            {items.map((n) => (
+              <View key={n.id} style={styles.memberRow}>
+                <Text style={[styles.name, !n.is_read && styles.notifUnread]} numberOfLines={2}>
+                  {n.text || n.kind}
+                </Text>
+                <Text style={styles.time}>{fmtTime(n.created_at)}</Text>
+              </View>
+            ))}
+          </ScrollView>
+        )}
+        <View style={styles.modalActions}>
+          <TouchableOpacity style={styles.ghostButton} onPress={markAll}><Text style={styles.ghostText}>Mark all read</Text></TouchableOpacity>
+          <TouchableOpacity style={styles.primaryButtonSmall} onPress={onClose}><Text style={styles.primaryButtonText}>Close</Text></TouchableOpacity>
+        </View>
+      </View>
+    </View>
   );
 }
 
@@ -1056,6 +1280,8 @@ export default function App() {
   const [groupOpen, setGroupOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [notifOpen, setNotifOpen] = useState(false);
+  const [notifCount, setNotifCount] = useState(0);
   const [error, setError] = useState('');
   const [connOnline, setConnOnline] = useState(true);
   const [pushToken, setPushToken] = useState(null);
@@ -1088,6 +1314,15 @@ export default function App() {
 
   useEffect(() => { refreshConversations(); }, [user, refreshConversations]);
 
+  /* unread notification count (bell badge) */
+  const refreshNotifications = useCallback(() => {
+    if (!user) return;
+    getNotifications()
+      .then((data) => setNotifCount(data.unread || 0))
+      .catch(() => {});
+  }, [user]);
+  useEffect(() => { refreshNotifications(); }, [user, refreshNotifications]);
+
   useEffect(() => {
     if (!user || !getAuthToken()) return;
     let socket = null;
@@ -1104,6 +1339,7 @@ export default function App() {
           if (['conversation.new', 'notification.event', 'message.read'].includes(payload.type)) {
             refreshConversations();
           }
+          if (payload.type === 'notification.event') refreshNotifications();
         } catch {}
       };
       socket.onclose = () => {
@@ -1115,7 +1351,7 @@ export default function App() {
     }
     connect();
     return () => { closed = true; clearTimeout(retryTimer); if (socket) socket.close(); };
-  }, [user, refreshConversations]);
+  }, [user, refreshConversations, refreshNotifications]);
 
   /* push notifications: register after login, handle taps */
   useEffect(() => {
@@ -1184,6 +1420,48 @@ export default function App() {
     }
   }
 
+  async function handleChatState(conv, action, value) {
+    try {
+      if (action === 'clear') {
+        await clearChat(conv.id);
+        if (active?.id === conv.id) setActive(null);
+      } else {
+        await setConversationState(conv.id, { [action]: value });
+      }
+      refreshConversations();
+    } catch (err) {
+      setError(err.message);
+    }
+  }
+
+  async function handleChatAction(action) {
+    if (!active) return;
+    const conv = active;
+    try {
+      if (action === 'pin') {
+        await setConversationState(conv.id, { pinned: !conv.pinned });
+      } else if (action === 'mute') {
+        await setConversationState(conv.id, { muted: !conv.muted });
+      } else if (action === 'archive') {
+        await setConversationState(conv.id, { archived: !conv.archived });
+      } else if (action === 'clear') {
+        await clearChat(conv.id);
+        if (active?.id === conv.id) setActive(null);
+      } else if (action === 'leave') {
+        await leaveGroup(conv.id);
+        setConversations((current) => current.filter((item) => item.id !== conv.id));
+        if (active?.id === conv.id) setActive(null);
+      } else if (action === 'block') {
+        await toggleBlockUser(peerOf(conv, user)?.id, false);
+        Alert.alert('Nexlink', 'User blocked. They can no longer message you.');
+        if (active?.id === conv.id) setActive(null);
+      }
+      refreshConversations();
+    } catch (err) {
+      setError(err.message);
+    }
+  }
+
   async function handleLogout() {
     if (pushToken) unregisterPushToken(pushToken).catch(() => {});
     await logout();
@@ -1211,6 +1489,7 @@ export default function App() {
       onBack={() => setActive(null)}
       isWide={isWide}
       onConversationsChanged={refreshConversations}
+      onChatAction={handleChatAction}
       key={conv.id}
     />
   );
@@ -1236,6 +1515,9 @@ export default function App() {
           onPhoneChat={handlePhoneChat}
           isWide={isWide}
           connOnline={connOnline}
+          notifCount={notifCount}
+          onNotifications={() => setNotifOpen(true)}
+          onChatState={handleChatState}
         />
         {active && isWide && chatView(active)}
       </View>
@@ -1258,6 +1540,12 @@ export default function App() {
         />
       )}
       {settingsOpen && <SettingsScreen onClose={() => setSettingsOpen(false)} />}
+      {notifOpen && (
+        <NotificationsModal
+          onClose={() => setNotifOpen(false)}
+          onOpened={refreshNotifications}
+        />
+      )}
       {error ? <ErrorText message={error} /> : null}
     </>
   );
@@ -1404,6 +1692,33 @@ const styles = StyleSheet.create({
   mineTime: { color: 'rgba(6,32,36,0.62)', fontSize: 10 },
   theirsTime: { color: colors.muted, fontSize: 10 },
   tick: { color: '#062024', fontSize: 10, fontWeight: '800' },
+  /* notifications + message actions */
+  notifBadge: {
+    position: 'absolute', top: -4, right: -4, backgroundColor: colors.danger,
+    minWidth: 16, height: 16, borderRadius: 8, paddingHorizontal: 4,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  notifBadgeText: { color: '#ffffff', fontSize: 9.5, fontWeight: '800' },
+  notifUnread: { fontWeight: '800' },
+  flagRow: { fontSize: 11, marginRight: 4 },
+  replyBar: { borderTopWidth: 1, borderTopColor: colors.border, borderBottomWidth: 1, borderBottomColor: colors.border },
+  replyBox: {
+    backgroundColor: 'rgba(0,0,0,0.06)', borderLeftWidth: 3, borderLeftColor: colors.primaryStrong,
+    borderRadius: 8, paddingHorizontal: 9, paddingVertical: 5, marginBottom: 5,
+  },
+  replyBoxMine: { borderLeftColor: '#062024' },
+  replyName: { color: colors.primaryStrong, fontSize: 11.5, fontWeight: '800' },
+  replyBody: { color: colors.muted, fontSize: 12.5, marginTop: 1 },
+  reactionsRow: { flexDirection: 'row', gap: 4, marginTop: -6 },
+  reactionsMine: { alignSelf: 'flex-end', marginRight: 8 },
+  reactionsTheirs: { alignSelf: 'flex-start', marginLeft: 8 },
+  reactionPill: {
+    flexDirection: 'row', alignItems: 'center', gap: 3,
+    backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border,
+    borderRadius: 999, paddingHorizontal: 7, paddingVertical: 2,
+  },
+  reactionEmoji: { fontSize: 12 },
+  reactionCount: { color: colors.text, fontSize: 10.5, fontWeight: '800' },
   attachImage: { width: 220, height: 150, borderRadius: 10, marginBottom: 4, backgroundColor: colors.surfaceAlt },
   attachFile: { backgroundColor: 'rgba(0,0,0,0.06)', borderRadius: 10, padding: 9, marginBottom: 4, minWidth: 150 },
   attachFileName: { color: colors.text, fontWeight: '700', fontSize: 13 },

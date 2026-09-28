@@ -23,7 +23,7 @@ The public landing page (`/`) is the only indexable page on the site.
 * **Meta description:** `Nexlink is a modern messaging and chat web app for private, real-time conversations — create a free account and connect with your people online.`
 * **Canonical:** `https://nexlink-app.onrender.com/` (from `SITE_URL`)
 * **Open Graph + Twitter card:** title, description, url, site name "Nexlink", image `icon-512.png`
-* **JSON-LD:** `WebApplication` schema (`CommunicationApplication`, `operatingSystem: Web`, feature list of real features only, `offers.price: 0`). No fake ratings, reviews, or user counts.
+* **JSON-LD:** `WebApplication` schema (`CommunicationApplication`, `operatingSystem: Web`, feature list of real features only, `offers.price: 0`) plus a `FAQPage` schema generated from the homepage FAQ section. No fake ratings, reviews, or user counts.
 
 All of this is centralized in `config/seo.py` and rendered by
 `templates/partials/seo_head.html`. Brand strings live in one place — do not
@@ -68,6 +68,7 @@ landing page is a static template with no user data.
 | -------- | ------- | ------- |
 | `SITE_URL` | Base URL for canonical, OG, sitemap, JSON-LD | `https://nexlink-app.onrender.com` |
 | `GOOGLE_SITE_VERIFICATION` | Google Search Console meta-tag verification | value from GSC (no quotes, no `content=`) |
+| `BING_SITE_VERIFICATION` | Bing Webmaster Tools meta-tag verification (optional) | token from Bing |
 
 `SITE_URL` is defined in `config/settings.py`. On Render set it to
 `https://nexlink-app.onrender.com` (no trailing slash). If unset, settings fall
@@ -133,8 +134,7 @@ existing service, database, Redis and static-file configuration are untouched.
   must stay out of the index.
 * **`templates/robots.txt` / `config/sitemaps.py`** — keep private URLs out of
   both.
-* **The landing template's H1** — exactly one H1 per page; heading structure is
-  asserted by tests (`check_seo`, `SEOViewTests`).
+* **The landing template's H1 and FAQ section** — exactly one H1 per page; heading structure and FAQ schema are asserted by tests (`check_seo`, `SEOViewTests`). FAQ copy lives in `config/seo.py`.
 * **Manifest, favicon, service worker** — existing PWA branding already matches
   the Nexlink brand; the og:image points at the real `icon-512.png`.
 

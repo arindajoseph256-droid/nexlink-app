@@ -35,6 +35,7 @@ def page_meta(request, title, description, path='/'):
         'seo_site_name': BRAND,
         'seo_image': image,
         'seo_google_verification': getattr(settings, 'GOOGLE_SITE_VERIFICATION', ''),
+        'seo_bing_verification': getattr(settings, 'BING_SITE_VERIFICATION', ''),
     }
 
 
@@ -58,6 +59,41 @@ def home_meta(request):
             'Voice and video calls',
             'Real-time delivery and read receipts',
             'Installable web app (PWA)',
+        ],
+    })
+    faq_items = [
+        {
+            'q': 'What is the Nexlink app?',
+            'a': 'Nexlink is a free online messaging app that runs in your browser. '
+                 'It works on phones, tablets and desktops from the same account.',
+        },
+        {
+            'q': 'Is Nexlink free to use?',
+            'a': 'Yes. Nexlink is free — create an account with your phone number '
+                 'and start chatting. There is no paid plan or hidden fee.',
+        },
+        {
+            'q': 'Do I need to install anything to use Nexlink online?',
+            'a': 'No. The Nexlink web app runs directly in Chrome, Safari, Firefox '
+                 'and Edge. On Android you can also install it as an app.',
+        },
+        {
+            'q': 'Is Nexlink messenger private?',
+            'a': 'Your conversations are private to you and the people you chat '
+                 'with. You control last seen, read receipts and typing indicators.',
+        },
+    ]
+    meta['seo_faq'] = faq_items
+    meta['seo_faq_json_ld'] = json.dumps({
+        '@context': 'https://schema.org',
+        '@type': 'FAQPage',
+        'mainEntity': [
+            {
+                '@type': 'Question',
+                'name': item['q'],
+                'acceptedAnswer': {'@type': 'Answer', 'text': item['a']},
+            }
+            for item in faq_items
         ],
     })
     return meta

@@ -789,6 +789,21 @@ class SEOViewTests(TestCase):
         self.assertEqual(data['url'], settings.SITE_URL + '/')
         self.assertEqual(data['applicationCategory'], 'CommunicationApplication')
 
+    def test_home_faq_section_and_faqpage_schema(self):
+        response = self.client.get('/')
+        html = response.content.decode()
+        self.assertIn('id="faq"', html)
+        self.assertIn('What is the Nexlink app?', html)
+        self.assertIn('Is Nexlink free to use?', html)
+        match = re.search(
+            r'<script type="application/ld\+json">(\{"@context": "https://schema.org", "@type": "FAQPage".*?)</script>',
+            html, re.DOTALL,
+        )
+        self.assertIsNotNone(match, 'FAQPage JSON-LD missing')
+        data = json.loads(match.group(1))
+        self.assertEqual(len(data['mainEntity']), 4)
+        self.assertEqual(data['mainEntity'][0]['@type'], 'Question')
+
     def test_robots_txt(self):
         response = self.client.get('/robots.txt')
         self.assertEqual(response.status_code, 200)

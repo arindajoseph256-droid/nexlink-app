@@ -14,6 +14,10 @@
 {% if seo_canonical %}<link rel="canonical" href="{{ seo_canonical }}">{% endif %}
 {% if seo_noindex %}<meta name="robots" content="noindex, nofollow">{% endif %}
 {% if seo_google_verification %}<meta name="google-site-verification" content="{{ seo_google_verification }}">{% endif %}
+{% if seo_bing_verification %}<meta name="msvalidate.01" content="{{ seo_bing_verification }}">{% endif %}
 {% if seo_json_ld %}
 <script type="application/ld+json">{{ seo_json_ld|safe }}</script>
+{% endif %}
+{% if seo_faq_json_ld %}
+<script type="application/ld+json">{{ seo_faq_json_ld|safe }}</script>
 {% endif %}

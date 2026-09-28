@@ -21,6 +21,7 @@
         </a>
         <nav class="topbar__nav" aria-label="Main navigation">
             <a href="#features" class="nav-link">Features</a>
+            <a href="#faq" class="nav-link">FAQ</a>
             <a href="#about" class="nav-link">About</a>
             <a href="{% url 'accounts:login' %}" class="nav-link">Log in</a>
             <a href="{% url 'accounts:register' %}" class="nav-link nav-link--cta">Create free account</a>
@@ -98,6 +99,21 @@
         </p>
         <div class="hero__actions">
             <a class="btn btn--primary" href="{% url 'accounts:register' %}">Join Nexlink</a>
+        </div>
+    </section>
+
+    <section id="faq" class="public-section public-section--alt" aria-labelledby="faq-title">
+        <h2 id="faq-title">Nexlink app — common questions</h2>
+        <div class="faq-list">
+            {% for item in seo_faq %}
+            <article class="faq-item">
+                <h3>{{ item.q }}</h3>
+                <p>{{ item.a }}</p>
+            </article>
+            {% endfor %}
+        </div>
+        <div class="hero__actions">
+            <a class="btn btn--primary" href="{% url 'accounts:register' %}">Try Nexlink online</a>
         </div>
     </section>
 

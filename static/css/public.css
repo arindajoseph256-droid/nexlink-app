@@ -208,3 +208,28 @@
         display: none;
     }
 }
+
+/* FAQ */
+.faq-list {
+    display: grid;
+    gap: 18px;
+    max-width: 46rem;
+    margin: 0 auto 26px;
+}
+.faq-item {
+    background: #ffffff;
+    border: 1px solid var(--line, #dfe7e3);
+    border-radius: 16px;
+    padding: 20px 22px;
+}
+.faq-item h3 {
+    margin: 0 0 8px;
+    font-size: 1.05rem;
+    font-weight: 600;
+    color: var(--text-1, #0c2329);
+}
+.faq-item p {
+    margin: 0;
+    color: var(--text-2, #667085);
+    line-height: 1.65;
+}
