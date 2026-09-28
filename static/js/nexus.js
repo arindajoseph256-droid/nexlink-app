@@ -168,8 +168,10 @@
         if (openMenu) { openMenu.remove(); openMenu = null; }
         $all('.menu').forEach(function (m) { m.remove(); });
     }
+    var _menuOpenedAt = 0;
     function showMenu(items, x, y) {
         closeMenus();
+        _menuOpenedAt = Date.now();
         var menu = document.createElement('div');
         menu.className = 'menu';
         menu.innerHTML = items.map(function (item, i) {
@@ -191,7 +193,10 @@
         });
     }
     document.addEventListener('click', function (e) {
-        if (openMenu && !openMenu.contains(e.target)) closeMenus();
+        if (!openMenu) return;
+        if (openMenu.contains(e.target)) return;
+        if (Date.now() - _menuOpenedAt < 350) return; /* ignore the click that opened the menu */
+        closeMenus();
     });
 
     /* ---------- avatars ---------- */
@@ -932,6 +937,7 @@
 
     /* ---------- attachments ---------- */
     $('#btnAttach').addEventListener('click', function (e) {
+        e.stopPropagation(); /* keep the document outside-click handler from closing the menu instantly */
         var rect = e.currentTarget.getBoundingClientRect();
         showMenu([
             { label: 'Photos', icon: '', onClick: function () { pickFile('image/*', 'image'); } },
