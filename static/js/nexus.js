@@ -261,6 +261,8 @@
             updatedAt: raw.updated_at,
             messages: [],
             fullyLoaded: false,
+            oldestLoadedId: null,
+            loadingOlder: false,
         };
     }
 
@@ -283,13 +285,50 @@
         if (!chat || chat.fullyLoaded) return Promise.resolve();
         return API.get('/api/conversations/' + chatId + '/messages/').then(function (data) {
             var results = (data && data.results) || [];
-            chat.messages = results.map(normalizeMessage).reverse().concat(chat.messages);
+            /* API pages are chronological (oldest→newest). Merge keeping
+               ascending order so the newest messages sit at the BOTTOM of
+               the chat (WhatsApp style); older pages load on scroll-up. */
+            var incoming = results.map(normalizeMessage);
+            chat.messages = mergeChronological(chat.messages, incoming);
             if (!data.has_more) chat.fullyLoaded = true;
+            chat.oldestLoadedId = data.oldest_id || (incoming.length ? incoming[0].id : null);
             State.messagesLoaded[chatId] = true;
             renderMessages();
         }).catch(function () {
             toast('Could not load messages');
         });
+    }
+
+    function loadOlderMessages(chatId) {
+        var chat = findChat(chatId);
+        if (!chat || chat.fullyLoaded || chat.loadingOlder) return Promise.resolve();
+        if (!chat.oldestLoadedId) return Promise.resolve();
+        chat.loadingOlder = true;
+        return API.get('/api/conversations/' + chatId + '/messages/?before=' + chat.oldestLoadedId)
+            .then(function (data) {
+                var results = (data && data.results) || [];
+                if (!results.length) { chat.fullyLoaded = true; return; }
+                var incoming = results.map(normalizeMessage);
+                chat.messages = mergeChronological(incoming, chat.messages);
+                if (!data.has_more) chat.fullyLoaded = true;
+                chat.oldestLoadedId = data.oldest_id || chat.oldestLoadedId;
+                renderMessages();
+            })
+            .catch(function () { /* transient: retried on next scroll-up */ })
+            .then(function () { chat.loadingOlder = false; });
+    }
+
+    /* Merge two ascending message lists without duplicates; result ascending. */
+    function mergeChronological(older, newer) {
+        var seen = {};
+        var out = [];
+        older.concat(newer).forEach(function (m) {
+            if (seen[m.id]) return;
+            seen[m.id] = true;
+            out.push(m);
+        });
+        out.sort(function (a, b) { return new Date(a.ts) - new Date(b.ts); });
+        return out;
     }
 
     function normalizeMessage(raw) {
@@ -560,6 +599,7 @@
         $('#composerWrap').classList.remove('hidden');
         renderChatHeader();
         renderPinnedBanner();
+        State._stickBottom = true;
         if (!State.messagesLoaded[chat.id]) {
             loadMessages(chat.id);
         } else {
@@ -644,7 +684,11 @@
             html += '<div class="typing-row"><div class="typing-bubble"><i></i><i></i><i></i></div></div>';
         }
         box.innerHTML = html;
-        requestAnimationFrame(function () { box.scrollTop = box.scrollHeight; });
+        /* Keep the user's place: jump to bottom only when already near it
+           (or when the chat was just opened); preserve position otherwise. */
+        if (State._stickBottom) {
+            requestAnimationFrame(function () { box.scrollTop = box.scrollHeight; });
+        }
     }
 
     function renderMessage(m, isFirst, isSameSender, chat) {
@@ -2268,6 +2312,22 @@
         savePrefs({ theme: next });
     });
 
+    /* Load older messages when scrolled near the top (WhatsApp style). */
+    $('#messages').addEventListener('scroll', function () {
+        var box = this;
+        var nearBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 80;
+        State._stickBottom = nearBottom;
+        if (box.scrollTop <= 60) {
+            var chat = activeChat();
+            if (chat && !chat.fullyLoaded && !chat.loadingOlder) {
+                var anchor = box.scrollHeight - box.scrollTop;
+                loadOlderMessages(chat.id).then(function () {
+                    /* restore the viewport so rows appended above don't shift it */
+                    box.scrollTop = box.scrollHeight - anchor;
+                });
+            }
+        }
+    });
     $('#convSearch').addEventListener('input', renderConvList);
     $('#filterTabs').addEventListener('click', function (e) {
         var btn = e.target.closest('button[data-filter]');
