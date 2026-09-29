@@ -23,7 +23,6 @@ import {
   getAuthToken,
 } from '../api';
 import { DaySeparator, MessageBubble, copyMessageText, downloadAttachment } from '../components/MessageBubble';
-import { ImageViewerModal } from '../components/ImageViewerModal';
 import { MessageComposer } from '../components/MessageComposer';
 import { TypingIndicator } from '../components/TypingIndicator';
 import { Avatar, ErrorText } from '../components/ui';
@@ -58,7 +57,6 @@ export function ChatScreen({ user }) {
   const [enterToSend, setEnterToSend] = useState(true);
   const [recording, setRecording] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [viewerMessage, setViewerMessage] = useState(null);
 
   const socketRef = useRef(null);
   const typingTimer = useRef(null);
@@ -320,11 +318,7 @@ export function ChatScreen({ user }) {
   }
 
   function handleAttachmentPress(message) {
-    if (message.message_type === 'image' && message.attachment_url) {
-      setViewerMessage(message); // full-screen zoomable viewer
-    } else {
-      downloadAttachment(message);
-    }
+    downloadAttachment(message);
   }
 
   async function runMessageAction(message, action) {
@@ -617,14 +611,6 @@ export function ChatScreen({ user }) {
         uploading={busy}
         onToggleRecording={toggleRecording}
         enterToSend={enterToSend}
-      />
-
-      <ImageViewerModal
-        visible={Boolean(viewerMessage)}
-        uri={viewerMessage?.attachment_url}
-        name={viewerMessage?.attachment_name}
-        onClose={() => setViewerMessage(null)}
-        onDownload={() => viewerMessage && downloadAttachment(viewerMessage)}
       />
     </SafeAreaView>
   );
