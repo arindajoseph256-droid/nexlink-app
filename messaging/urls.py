@@ -2,10 +2,12 @@
 from django.urls import path
 
 from . import views
+from .mobile_version import mobile_version
 
 app_name = 'messaging_api'
 
 urlpatterns = [
+    path('mobile/version/', mobile_version, name='mobile_version'),
     path('conversations/', views.ConversationListView.as_view(), name='conversations'),
     path('conversations/start/', views.ConversationCreateView.as_view(), name='conversation_start'),
     path(

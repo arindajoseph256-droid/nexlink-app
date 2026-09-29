@@ -1,0 +1,84 @@
+/**
+ * Media service: image/camera/document/voice-note helpers.
+ * Uses SDK-57 packages (expo-image-picker, expo-document-picker, expo-audio).
+ * Each helper degrades gracefully with a clear message when a module or
+ * permission is unavailable — no silent no-op buttons.
+ */
+let ImagePicker = null;
+try {
+  ImagePicker = require('expo-image-picker');
+} catch {}
+let DocumentPicker = null;
+try {
+  DocumentPicker = require('expo-document-picker');
+} catch {}
+let ExpoAudio = null;
+try {
+  ExpoAudio = require('expo-audio');
+} catch {}
+
+function requireModule(mod, feature) {
+  if (!mod) throw new Error(`${feature} is unavailable in this build.`);
+  return mod;
+}
+
+export async function pickImage({ fromCamera = false } = {}) {
+  const picker = requireModule(ImagePicker, 'Image picking');
+  const permission = fromCamera
+    ? await picker.requestCameraPermissionsAsync()
+    : await picker.requestMediaLibraryPermissionsAsync();
+  if (permission.status !== 'granted') {
+    throw new Error('Permission denied. Enable it in Settings to send photos.');
+  }
+  const result = fromCamera
+    ? await picker.launchCameraAsync({ quality: 0.7 })
+    : await picker.launchImageLibraryAsync({ quality: 0.7, mediaTypes: ['images'] });
+  if (result.canceled || !result.assets?.length) return null;
+  const asset = result.assets[0];
+  const kind = asset.type === 'video' ? 'video' : 'image';
+  return {
+    kind,
+    file: {
+      uri: asset.uri,
+      name: asset.fileName || `${kind}-${Date.now()}.jpg`,
+      mimeType: asset.mimeType || (kind === 'video' ? 'video/mp4' : 'image/jpeg'),
+    },
+  };
+}
+
+export async function pickDocument() {
+  const picker = requireModule(DocumentPicker, 'Document picking');
+  const result = await picker.getDocumentAsync({ copyToCacheDirectory: true });
+  if (result.canceled) return null;
+  const asset = result.assets?.[0];
+  if (!asset) return null;
+  return {
+    kind: 'file',
+    file: {
+      uri: asset.uri,
+      name: asset.name,
+      mimeType: asset.mimeType || 'application/octet-stream',
+    },
+  };
+}
+
+/* --- Voice notes via expo-audio (SDK 52+ API) --- */
+
+export async function startVoiceRecording() {
+  const audio = requireModule(ExpoAudio, 'Voice recording');
+  const permission = await audio.requestRecordingPermissionsAsync();
+  if (permission.status !== 'granted') {
+    throw new Error('Microphone permission denied. Enable it in Settings to record voice notes.');
+  }
+  const recorder = audio.useAudioRecorder; // documented hook API lives in the hook; module API below
+  void recorder;
+  const recording = await audio.createRecordingPlayer?.();
+  void recording;
+  throw new Error('Voice recording requires the recorder hook (handled in the composer component).');
+}
+
+export function audioModulesAvailable() {
+  return { imagePicker: Boolean(ImagePicker), documentPicker: Boolean(DocumentPicker), audio: Boolean(ExpoAudio) };
+}
+
+export { ExpoAudio };
