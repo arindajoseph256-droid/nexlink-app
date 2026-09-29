@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Image } from 'react-native';
+import { Image, PixelRatio } from 'react-native';
 
 import { API_BASE_URL, getAuthToken } from '../api';
 
@@ -16,8 +16,18 @@ import { API_BASE_URL, getAuthToken } from '../api';
  * which only work in browsers where they resolve against the origin — RN needs
  * the absolute URL, so it is resolved against the API base URL here.
  */
-export function AuthenticatedImage({ uri, token = getAuthToken(), ...props }) {
+export function AuthenticatedImage({ uri, token = getAuthToken(), onSize, ...props }) {
   const [source, setSource] = useState(null);
+
+  function handleLoad(event) {
+    const intrinsic = event?.nativeEvent?.source;
+    if (onSize && intrinsic?.width && intrinsic?.height) {
+      // RN reports intrinsic pixels; convert to density-independent points.
+      const ratio = PixelRatio.get();
+      onSize({ width: intrinsic.width / ratio, height: intrinsic.height / ratio });
+    }
+    props.onLoad?.(event);
+  }
 
   useEffect(() => {
     if (!uri) {
@@ -37,5 +47,5 @@ export function AuthenticatedImage({ uri, token = getAuthToken(), ...props }) {
   }, [uri, token]);
 
   if (!source) return null;
-  return <Image source={source} {...props} />;
+  return <Image source={source} onLoad={handleLoad} {...props} />;
 }
