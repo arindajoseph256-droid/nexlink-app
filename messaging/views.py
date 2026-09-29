@@ -5,11 +5,14 @@ from django.http import FileResponse
 from django.db.models import Count, OuterRef, Q, Subquery
 from django.shortcuts import get_object_or_404
 from rest_framework import generics, permissions, status
-from rest_framework.decorators import api_view, permission_classes, throttle_classes, throttle_scope
+from rest_framework.authentication import SessionAuthentication, TokenAuthentication
+from rest_framework.decorators import api_view, authentication_classes, permission_classes, throttle_classes, throttle_scope
 from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
 
 from accounts.models import Profile, UserPreferences
+
+from .authentication import QueryTokenAuthentication
 
 from .models import (
     BlockedUser,
@@ -798,15 +801,20 @@ def delete_message_for_me(request, message_id):
 
 
 @api_view(['GET'])
+@authentication_classes([QueryTokenAuthentication, SessionAuthentication, TokenAuthentication])
 @permission_classes([permissions.IsAuthenticated])
 def download_attachment(request, message_id):
-    """Stream an attachment only to a current conversation participant."""
+    """Stream an attachment only to a current conversation participant.
+
+    Accepts session auth (web) or ?token=<key> (native <Image>/downloaders).
+    """
+    viewer = request.user
     message = get_object_or_404(
         Message.objects.select_related('conversation'), pk=message_id,
     )
-    if not message.attachment or not message.conversation.is_participant(request.user):
+    if not message.attachment or not message.conversation.is_participant(viewer):
         return Response({'detail': 'Attachment not found.'}, status=status.HTTP_404_NOT_FOUND)
-    if not message.visible_to(request.user):
+    if not message.visible_to(viewer):
         return Response({'detail': 'Attachment not found.'}, status=status.HTTP_404_NOT_FOUND)
     response = FileResponse(
         message.attachment.open('rb'),

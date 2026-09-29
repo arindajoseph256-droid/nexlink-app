@@ -6,10 +6,10 @@ import { useTheme } from '../theme/ThemeProvider';
 import { AuthNavigator } from './AuthNavigator';
 import { MainNavigator } from './MainNavigator';
 
-export function RootNavigator({ user, onLogout }) {
+export function RootNavigator({ user, onLogout, navigationRef }) {
   const { colors } = useTheme();
   return (
-    <NavigationContainer>
+    <NavigationContainer ref={navigationRef}>
       <StatusBar style={colors.statusBar} backgroundColor={colors.welcomeBg} />
       {user ? <MainNavigator user={user} onLogout={onLogout} /> : <AuthNavigator />}
     </NavigationContainer>

@@ -4,8 +4,11 @@ export function getNotifications() {
   return request('/api/notifications/');
 }
 
-export function markNotificationsRead() {
-  return request('/api/notifications/read/', { method: 'POST' });
+export function markNotificationsRead(notificationId = null) {
+  return request('/api/notifications/read/', {
+    method: 'POST',
+    body: JSON.stringify(notificationId ? { id: notificationId } : {}),
+  });
 }
 
 export function registerPushToken(token) {

@@ -13,7 +13,6 @@ import {
 
 import { API_BASE_URL, login } from '../api/auth';
 import { ErrorText, LoadingState } from '../components/ui';
-import { nexlinkIcon } from '../branding';
 import { ThemeContext } from '../theme/ThemeProvider';
 import { friendlyError } from '../utils/errors';
 

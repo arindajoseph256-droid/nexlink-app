@@ -2,11 +2,9 @@ import React, { useContext, useEffect, useState } from 'react';
 import { StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 
-import { getPreferences, updatePreferences } from '../api/settings';
 import { getMe, updateProfile } from '../api/auth';
-import { ErrorText, SettingsRow, SettingsSwitch, SectionTitle } from '../components/ui';
+import { ErrorText } from '../components/ui';
 import { ThemeContext } from '../theme/ThemeProvider';
 import { friendlyError } from '../utils/errors';
 

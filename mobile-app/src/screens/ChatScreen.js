@@ -22,13 +22,13 @@ import {
   toggleReaction,
   getAuthToken,
 } from '../api';
-import { DaySeparator, MessageBubble, copyMessageText } from '../components/MessageBubble';
+import { DaySeparator, MessageBubble, copyMessageText, downloadAttachment } from '../components/MessageBubble';
 import { MessageComposer } from '../components/MessageComposer';
 import { TypingIndicator } from '../components/TypingIndicator';
 import { Avatar, ErrorText } from '../components/ui';
 import { makeQueuedMessage, flushConversation, loadOutbox, removeQueuedForChat } from '../services/offlineQueue';
 import { ManagedSocket } from '../services/websocket';
-import { pickDocument, pickImage } from '../services/media';
+import { pickDocument, pickImage, startVoiceRecording, stopVoiceRecording } from '../services/media';
 import { loadEnterToSend } from '../storage/settingsStorage';
 import { ThemeContext } from '../theme/ThemeProvider';
 import { friendlyError, isOfflineError } from '../utils/errors';
@@ -55,6 +55,8 @@ export function ChatScreen({ user }) {
   const [replyTo, setReplyTo] = useState(null);
   const [editing, setEditing] = useState(null);
   const [enterToSend, setEnterToSend] = useState(true);
+  const [recording, setRecording] = useState(false);
+  const [busy, setBusy] = useState(false);
 
   const socketRef = useRef(null);
   const typingTimer = useRef(null);
@@ -142,8 +144,20 @@ export function ChatScreen({ user }) {
           setMessages((current) =>
             current.map((m) => {
               if (m.id !== payload.message_id) return m;
-              const reactions = (m.reactions || []).filter((r) => r.emoji !== payload.emoji);
-              if (payload.added) reactions.push({ emoji: payload.emoji, count: 1, users: [payload.user_id] });
+              const reactions = (m.reactions || []).map((r) => ({ ...r, users: [...(r.users || [])] }));
+              const existing = reactions.find((r) => r.emoji === payload.emoji);
+              if (payload.added) {
+                if (existing) {
+                  existing.count += 1;
+                  existing.users.push(payload.user_id);
+                } else {
+                  reactions.push({ emoji: payload.emoji, count: 1, users: [payload.user_id] });
+                }
+              } else if (existing) {
+                existing.count -= 1;
+                existing.users = existing.users.filter((id) => id !== payload.user_id);
+                if (existing.count <= 0) reactions.splice(reactions.indexOf(existing), 1);
+              }
               return { ...m, reactions };
             }),
           );
@@ -251,16 +265,65 @@ export function ChatScreen({ user }) {
         refreshQueue();
         return;
       }
-      const message = await sendAttachment(conversation.id, result.file, result.kind, '');
-      setMessages((current) => sortMessages([...current, message]));
+      setBusy(true);
+      try {
+        const message = await sendAttachment(conversation.id, result.file, result.kind, '');
+        setMessages((current) => sortMessages([...current, message]));
+      } finally {
+        setBusy(false);
+      }
     } catch (err) {
       setError(friendlyError(err));
     }
   }
 
+  /* Same quick reactions as the web app (static/js/nexus.js). */
+  const QUICK_REACTIONS = ['❤️', '😂', '👍', '😮', '😢', '🔥'];
+
+  async function reactWith(message, emoji) {
+    try {
+      const res = await toggleReaction(message.id, emoji);
+      setMessages((current) =>
+        current.map((m) => {
+          if (m.id !== message.id) return m;
+          const reactions = (m.reactions || []).map((r) => ({ ...r, users: [...(r.users || [])] }));
+          const existing = reactions.find((r) => r.emoji === emoji);
+          if (res?.added) {
+            if (existing) {
+              existing.count += 1;
+              existing.users.push(user.id);
+            } else {
+              reactions.push({ emoji, count: 1, users: [user.id] });
+            }
+          } else if (existing) {
+            existing.count -= 1;
+            existing.users = existing.users.filter((id) => id !== user.id);
+            if (existing.count <= 0) reactions.splice(reactions.indexOf(existing), 1);
+          }
+          return { ...m, reactions };
+        }),
+      );
+    } catch (err) {
+      setError(friendlyError(err));
+    }
+  }
+
+  function reactionPicker(message) {
+    const options = QUICK_REACTIONS.map((emoji) => ({
+      text: emoji,
+      onPress: () => reactWith(message, emoji),
+    }));
+    options.push({ text: 'Cancel', style: 'cancel' });
+    Alert.alert('React', undefined, options);
+  }
+
+  function handleAttachmentPress(message) {
+    downloadAttachment(message);
+  }
+
   async function runMessageAction(message, action) {
     try {
-      if (action === 'react') await toggleReaction(message.id, '❤️');
+      if (action === 'react') reactionPicker(message);
       else if (action === 'star') {
         const res = await starMessage(message.id);
         setMessages((current) => current.map((m) => (m.id === message.id ? { ...m, starred: res.starred } : m)));
@@ -286,6 +349,12 @@ export function ChatScreen({ user }) {
       { text: message.pinned ? 'Unpin' : '📌 Pin', onPress: () => runMessageAction(message, 'pin') },
     ];
     if (message.body) options.push({ text: 'Copy', onPress: () => runMessageAction(message, 'copy') });
+    if (message.attachment_url) {
+      options.push({
+        text: '⬇ Download',
+        onPress: () => downloadAttachment(message),
+      });
+    }
     if (mine) {
       options.push(
         {
@@ -392,10 +461,36 @@ export function ChatScreen({ user }) {
     }
   }
 
+  /* Voice notes: real expo-audio recording → sendAttachment('audio', …). */
+  const recordingRef = useRef(null);
+
   async function toggleRecording() {
-    // Voice notes are composed through the audio recorder module; the media
-    // service reports availability errors in a friendly way.
-    Alert.alert('Voice note', 'Hold the mic icon and speak. Recording is available on device builds with microphone access.');
+    if (recordingRef.current) {
+      // stop + send
+      const active = recordingRef.current;
+      recordingRef.current = null;
+      setRecording(false);
+      try {
+        const result = await stopVoiceRecording(active.recorder);
+        setBusy(true);
+        try {
+          const sent = await sendAttachment(conversation.id, result.file, result.kind, '');
+          setMessages((current) => sortMessages([...current, sent]));
+        } finally {
+          setBusy(false);
+        }
+      } catch (err) {
+        setError(friendlyError(err));
+      }
+      return;
+    }
+    try {
+      const session = await startVoiceRecording();
+      recordingRef.current = session;
+      setRecording(true);
+    } catch (err) {
+      Alert.alert('Voice note', friendlyError(err));
+    }
   }
 
   const styles = makeStyles(colors, accent);
@@ -415,6 +510,9 @@ export function ChatScreen({ user }) {
           isMine={mine}
           showSender={showSender}
           onLongPress={longPressMessage}
+          onPressAttachment={handleAttachmentPress}
+          onPressReaction={(message, emoji) => reactWith(message, emoji)}
+          user={user}
         />
       </View>
     );
@@ -499,6 +597,8 @@ export function ChatScreen({ user }) {
 
       <TypingIndicator visible={peerTyping} name={peer?.display_name} />
 
+      {error ? <Text style={styles.errorText}>{error}</Text> : null}
+
       <MessageComposer
         value={body}
         onChangeText={(text) => {
@@ -507,6 +607,8 @@ export function ChatScreen({ user }) {
         }}
         onSubmit={submit}
         onPick={handlePick}
+        recording={recording}
+        uploading={busy}
         onToggleRecording={toggleRecording}
         enterToSend={enterToSend}
       />
@@ -544,5 +646,6 @@ function makeStyles(colors, accent) {
     replyName: { fontSize: 12.5, fontWeight: '700' },
     messageList: { paddingVertical: 12 },
     empty: { color: colors.muted, textAlign: 'center', marginTop: 30 },
+    errorText: { color: colors.danger, fontSize: 12.5, paddingHorizontal: 16, paddingVertical: 4 },
   });
 }

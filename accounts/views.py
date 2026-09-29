@@ -6,10 +6,13 @@ from django.contrib.auth.decorators import login_required
 from django.contrib.auth.forms import PasswordChangeForm
 from django.contrib.auth.views import PasswordChangeDoneView
 from django.db import transaction
+from functools import wraps
+from django.contrib.auth.views import redirect_to_login
 from django.http import FileResponse, JsonResponse
 from django.shortcuts import redirect, render
 from django.urls import reverse_lazy
 from django.views.decorators.http import require_POST
+from rest_framework.authtoken.models import Token
 
 from .forms import (
     LoginForm,
@@ -22,6 +25,23 @@ from .models import derive_username_from_phone
 from .phones import normalize_e164
 
 User = get_user_model()
+
+
+def _avatar_viewer(request):
+    """Session user, or the DRF-Token user from ?token=<key> (native clients).
+
+    React Native's <Image> cannot attach an Authorization header, so the
+    avatar endpoint accepts the same query-token scheme as the WebSocket
+    layer. Session-cookie auth (web app) is untouched.
+    """
+    if request.user.is_authenticated:
+        return request.user
+    key = (request.GET.get('token') or '').strip()
+    if not key:
+        return None
+    token = Token.objects.select_related('user').filter(key=key).first()
+    user = getattr(token, 'user', None)
+    return user if user and user.is_active else None
 
 
 def register_view(request):
@@ -69,10 +89,26 @@ def profile_view(request):
     return render(request, 'accounts/profile.html', {'profile': profile})
 
 
-@login_required
+def avatar_auth_required(view_func):
+    """Like @login_required, but also accepts ?token=<key> (native <Image>)."""
+
+    @wraps(view_func)
+    def _wrapped(request, *args, **kwargs):
+        if _avatar_viewer(request) is None:
+            if request.GET.get('token'):
+                # Native client with a bad/expired token: JSON, not an HTML redirect.
+                return JsonResponse({'detail': 'Invalid or expired token.'}, status=401)
+            return redirect_to_login(request.get_full_path())
+        return view_func(request, *args, **kwargs)
+
+    return _wrapped
+
+
+@avatar_auth_required
 def avatar_view(request, user_id):
     """Serve an avatar only to authenticated viewers.
 
+    Authentication: session cookie (web) or ?token=<key> (native <Image>).
     A missing file (e.g. after a deploy on an ephemeral disk) answers 404
     so the UI can fall back to initials instead of erroring.
     """

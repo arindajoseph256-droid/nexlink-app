@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Platform, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Alert, Platform, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 
 import { pickDocument, pickImage } from '../services/media';
 import { useTheme } from '../theme/ThemeProvider';
@@ -10,11 +10,13 @@ export function MessageComposer({
   onSubmit,
   onPick,
   recording,
+  uploading,
   onToggleRecording,
   enterToSend = true,
 }) {
   const { colors, accent } = useTheme();
   const [busy, setBusy] = useState(false);
+  const disabled = busy || uploading;
 
   async function handlePick(kind) {
     if (busy) return;
@@ -23,8 +25,7 @@ export function MessageComposer({
       const result = kind === 'document' ? await pickDocument() : await pickImage({ fromCamera: false });
       if (result) onPick?.(result);
     } catch (error) {
-      onChangeText(''); // no-op keeps signature stable
-      throw error;
+      Alert.alert('Nexlink', String(error?.message || error));
     } finally {
       setBusy(false);
     }
@@ -32,18 +33,18 @@ export function MessageComposer({
 
   return (
     <View style={[styles.composer, { backgroundColor: colors.panel, borderTopColor: colors.border }]}>
-      <TouchableOpacity style={styles.iconButton} onPress={() => handlePick('image')}>
-        <Text style={styles.iconText}>🖼</Text>
+      <TouchableOpacity style={styles.iconButton} onPress={() => handlePick('image')} disabled={disabled}>
+        <Text style={[styles.iconText, disabled && { opacity: 0.4 }]}>🖼</Text>
       </TouchableOpacity>
-      <TouchableOpacity style={styles.iconButton} onPress={() => handlePick('document')}>
-        <Text style={styles.iconText}>📎</Text>
+      <TouchableOpacity style={styles.iconButton} onPress={() => handlePick('document')} disabled={disabled}>
+        <Text style={[styles.iconText, disabled && { opacity: 0.4 }]}>📎</Text>
       </TouchableOpacity>
       <TextInput
         style={[styles.input, { color: colors.text, borderColor: colors.border, backgroundColor: colors.surface }]}
         value={value}
         onChangeText={onChangeText}
         onSubmitEditing={enterToSend ? onSubmit : undefined}
-        placeholder="Message"
+        placeholder={uploading ? 'Uploading…' : recording ? 'Recording… tap ■ to send' : 'Message'}
         placeholderTextColor={colors.muted}
         multiline
       />
@@ -55,8 +56,9 @@ export function MessageComposer({
         <TouchableOpacity
           style={[styles.sendButton, { backgroundColor: recording ? colors.danger : accent }]}
           onPress={onToggleRecording}
+          disabled={disabled}
         >
-          <Text style={styles.sendText}>{recording ? '■' : '🎤'}</Text>
+          <Text style={styles.sendText}>{recording ? '■' : uploading ? '…' : '🎤'}</Text>
         </TouchableOpacity>
       )}
     </View>

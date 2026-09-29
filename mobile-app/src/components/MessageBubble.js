@@ -1,8 +1,26 @@
 import React from 'react';
-import { Alert, Image, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Alert, Linking, Platform, Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
+import { AuthenticatedImage } from './AuthenticatedImage';
 import { useTheme } from '../theme/ThemeProvider';
 import { fmtBytes, fmtDay, fmtTime } from '../utils/formatting';
+
+let ExpoClipboard = null;
+try {
+  ExpoClipboard = require('expo-clipboard');
+} catch {}
+let ExpoAudio = null;
+try {
+  ExpoAudio = require('expo-audio');
+} catch {}
+let FileSystem = null;
+let Sharing = null;
+try {
+  FileSystem = require('expo-file-system');
+} catch {}
+try {
+  Sharing = require('expo-sharing');
+} catch {}
 
 function tick(state, pending, colors) {
   if (pending) return '◷';
@@ -12,8 +30,79 @@ function tick(state, pending, colors) {
   return '';
 }
 
-export function MessageBubble({ message, isMine, showSender, onLongPress }) {
-  const { colors, withAlpha } = useTheme();
+function fmtDuration(totalSeconds) {
+  const s = Math.max(0, Math.floor(totalSeconds || 0));
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+}
+
+/** Download via authenticated GET, then open the Android share sheet. */
+export async function downloadAttachment(message, onProgress) {
+  const url = message?.attachment_url;
+  if (!url) return;
+  const name = message.attachment_name || 'attachment';
+  if (!FileSystem || !FileSystem.createDownloadResumable) {
+    // Module unavailable → open in the system browser (URL carries ?token=).
+    await Linking.openURL(url);
+    return;
+  }
+  const { getAuthToken, API_BASE_URL } = require('../api');
+  const token = getAuthToken();
+  let base = url;
+  if (base.startsWith('/')) base = `${API_BASE_URL}${base}`;
+  const separator = base.includes('?') ? '&' : '?';
+  const authenticatedUrl = token ? `${base}${separator}token=${encodeURIComponent(token)}` : base;
+  const target = `${FileSystem.cacheDirectory}${name.replace(/\s+/g, '_')}`;
+  try {
+    onProgress?.(0);
+    const { uri } = await FileSystem.createDownloadResumable(
+      authenticatedUrl,
+      target,
+      {},
+      (progress) => onProgress?.(progress.totalBytesExpected ? progress.totalBytesWritten / progress.totalBytesExpected : 0),
+    ).downloadAsync();
+    onProgress?.(1);
+    if (Sharing && (await Sharing.isAvailableAsync())) {
+      await Sharing.shareAsync(uri, { mimeType: message.attachment_mime_type || '*/*', dialogTitle: name });
+    } else {
+      Alert.alert('Downloaded', `Saved to app storage: ${name}`);
+    }
+  } catch (error) {
+    onProgress?.(null);
+    Alert.alert('Download failed', String(error?.message || 'Could not download the file. Try again.'));
+  }
+}
+
+/** Real audio playback for voice notes via expo-audio (SDK 57 hook API). */
+function AudioBubble({ uri, colors }) {
+  const { getAuthToken, API_BASE_URL } = require('../api');
+  const token = getAuthToken();
+  let resolved = uri || '';
+  if (resolved.startsWith('/')) resolved = `${API_BASE_URL}${resolved}`;
+  // Native players can send headers — prefer the header over a ?token= URL.
+  const player = ExpoAudio.useAudioPlayer(
+    token ? { uri: resolved, headers: { Authorization: `Token ${token}` } } : resolved,
+  );
+  const status = ExpoAudio.useAudioPlayerStatus(player);
+  const playing = Boolean(status?.playing);
+  return (
+    <View style={styles.audioRow}>
+      <TouchableOpacity
+        onPress={() => (playing ? player.pause() : player.play())}
+        style={[styles.audioButton, { backgroundColor: colors.accent }]}
+        accessibilityRole="button"
+        accessibilityLabel={playing ? 'Pause voice message' : 'Play voice message'}
+      >
+        <Text style={styles.audioIcon}>{playing ? '⏸' : '▶'}</Text>
+      </TouchableOpacity>
+      <Text style={[styles.audioTime, { color: colors.text }]}>
+        {fmtDuration(status?.currentTime || 0)} / {fmtDuration(status?.duration || 0)}
+      </Text>
+    </View>
+  );
+}
+
+export function MessageBubble({ message, isMine, showSender, onLongPress, onPressAttachment, onPressReaction, user }) {
+  const { colors, accent, withAlpha } = useTheme();
   const reactions = Array.isArray(message.reactions)
     ? message.reactions.filter((r) => r && r.count > 0)
     : [];
@@ -43,24 +132,46 @@ export function MessageBubble({ message, isMine, showSender, onLongPress }) {
               </View>
             )}
             {message.attachment_url && message.message_type === 'image' && (
-              <Image source={{ uri: message.attachment_url }} style={styles.attachImage} />
+              <Pressable onPress={() => onPressAttachment?.(message)}>
+                <AuthenticatedImage
+                  uri={message.attachment_url}
+                  style={styles.attachImage}
+                  resizeMode="cover"
+                />
+              </Pressable>
             )}
             {message.attachment_url && message.message_type === 'video' && (
-              <View style={[styles.attachFile, { backgroundColor: withAlpha(0.12) }]}>
+              <TouchableOpacity
+                style={[styles.attachFile, { backgroundColor: withAlpha(0.12) }]}
+                onPress={() => onPressAttachment?.(message)}
+              >
                 <Text style={[styles.attachName, { color: colors.text }]}>🎬 {message.attachment_name || 'Video'}</Text>
-                <Text style={[styles.attachSize, { color: colors.muted }]}>{fmtBytes(message.attachment_size)}</Text>
-              </View>
+                <Text style={[styles.attachSize, { color: colors.muted }]}>
+                  {fmtBytes(message.attachment_size)} · tap to open
+                </Text>
+              </TouchableOpacity>
             )}
             {message.attachment_url && message.message_type === 'audio' && (
-              <Text style={{ color: colors.text }}>🎙 Voice message</Text>
+              ExpoAudio ? (
+                <AudioBubble uri={message.attachment_url} colors={colors} />
+              ) : (
+                <TouchableOpacity onPress={() => onPressAttachment?.(message)}>
+                  <Text style={{ color: colors.text }}>🎙 {message.attachment_name || 'Voice message'}</Text>
+                </TouchableOpacity>
+              )
             )}
             {message.attachment_url && !['image', 'video', 'audio'].includes(message.message_type) && (
-              <View style={[styles.attachFile, { backgroundColor: withAlpha(0.12) }]}>
+              <TouchableOpacity
+                style={[styles.attachFile, { backgroundColor: withAlpha(0.12) }]}
+                onPress={() => onPressAttachment?.(message)}
+              >
                 <Text style={[styles.attachName, { color: colors.text }]} numberOfLines={1}>
                   📄 {message.attachment_name || 'Attachment'}
                 </Text>
-                <Text style={[styles.attachSize, { color: colors.muted }]}>{fmtBytes(message.attachment_size)}</Text>
-              </View>
+                <Text style={[styles.attachSize, { color: colors.muted }]}>
+                  {fmtBytes(message.attachment_size)} · tap to download
+                </Text>
+              </TouchableOpacity>
             )}
             {message.body && message.body.trim() ? (
               <Text style={[styles.body, { color: mine ? colors.bubbleOutText : colors.text }]}>
@@ -82,12 +193,25 @@ export function MessageBubble({ message, isMine, showSender, onLongPress }) {
       </Pressable>
       {reactions.length > 0 && (
         <View style={[styles.reactions, mine ? { alignSelf: 'flex-end' } : { alignSelf: 'flex-start' }]}>
-          {reactions.map((r) => (
-            <View key={r.emoji} style={[styles.reactionPill, { backgroundColor: colors.surfaceAlt }]}>
-              <Text style={{ fontSize: 12 }}>{r.emoji}</Text>
-              <Text style={[styles.reactionCount, { color: colors.muted }]}>{r.count}</Text>
-            </View>
-          ))}
+          {reactions.map((r) => {
+            const mineReaction = Array.isArray(r.users) && r.users.includes(user?.id);
+            return (
+              <TouchableOpacity
+                key={r.emoji}
+                style={[
+                  styles.reactionPill,
+                  { backgroundColor: colors.surfaceAlt },
+                  mineReaction && { backgroundColor: accent, borderColor: accent, borderWidth: 1 },
+                ]}
+                onPress={() => onPressReaction?.(message, r.emoji)}
+                accessibilityRole="button"
+                accessibilityLabel={`${r.emoji} ${r.count} reactions`}
+              >
+                <Text style={{ fontSize: 12 }}>{r.emoji}</Text>
+                <Text style={[styles.reactionCount, { color: colors.muted }]}>{r.count}</Text>
+              </TouchableOpacity>
+            );
+          })}
         </View>
       )}
     </View>
@@ -103,14 +227,17 @@ export function DaySeparator({ iso }) {
   );
 }
 
-export function copyMessageText(message) {
+export async function copyMessageText(message) {
   const text = message?.body || '';
   if (!text) return;
-  if (Platform.OS === 'web' && navigator?.clipboard) {
-    navigator.clipboard.writeText(text);
-  } else {
+  try {
+    if (ExpoClipboard?.setStringAsync) {
+      await ExpoClipboard.setStringAsync(text);
+    } else if (Platform.OS === 'web' && navigator?.clipboard) {
+      await navigator.clipboard.writeText(text);
+    }
     Alert.alert('Copied', 'Message text copied.');
-  }
+  } catch {}
 }
 
 const styles = StyleSheet.create({
@@ -125,6 +252,10 @@ const styles = StyleSheet.create({
   attachFile: { borderRadius: 10, paddingHorizontal: 10, paddingVertical: 8, marginBottom: 6 },
   attachName: { fontSize: 13, fontWeight: '600' },
   attachSize: { fontSize: 11, marginTop: 2 },
+  audioRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 },
+  audioButton: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center' },
+  audioIcon: { color: '#071d22', fontSize: 15, fontWeight: '800' },
+  audioTime: { fontSize: 12.5, fontVariant: ['tabular-nums'] },
   body: { fontSize: 15, lineHeight: 20 },
   meta: { flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center', marginTop: 2 },
   time: { fontSize: 10.5 },

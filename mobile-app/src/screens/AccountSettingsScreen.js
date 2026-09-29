@@ -41,13 +41,16 @@ export function AccountSettingsScreen({ user, onUserUpdated }) {
   async function changeAvatar() {
     setError('');
     try {
-      const result = await pickImage({ fromCamera: false });
+      // allowsEditing opens the native crop UI (square 1:1) before upload.
+      const result = await pickImage({ fromCamera: false, allowsEditing: true, aspect: [1, 1] });
       if (!result) return;
       setBusy(true);
       const data = await uploadAvatar(result.file);
       if (data.avatar_url) {
-        setAvatarUrl(data.avatar_url);
-        onUserUpdated?.({ avatar_url: data.avatar_url });
+        // Same URL now serves different bytes — bust the RN image cache.
+        const fresh = `${data.avatar_url}${data.avatar_url.includes('?') ? '&' : '?'}v=${Date.now()}`;
+        setAvatarUrl(fresh);
+        onUserUpdated?.({ avatar_url: fresh });
         setSaved(true);
       } else {
         setError(data.detail || 'Upload failed');

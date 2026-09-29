@@ -1,7 +1,8 @@
 import React from 'react';
-import { ActivityIndicator, Image, Platform, Switch, Text, TextStyle, View, ViewStyle } from 'react-native';
+import { ActivityIndicator, Platform, Switch, Text, TextStyle, View, ViewStyle } from 'react-native';
 import { StyleSheet, TouchableOpacity } from 'react-native';
 
+import { AuthenticatedImage } from './AuthenticatedImage';
 import { useTheme } from '../theme/ThemeProvider';
 import { initials } from '../utils/formatting';
 
@@ -12,7 +13,10 @@ export function Avatar({ name = '', uri, size = 40, online = null, color = null 
   return (
     <View style={{ width: size, height: size }}>
       {uri ? (
-        <Image source={{ uri }} style={[styles.avatarImage, { width: size, height: size, borderRadius: size / 2 }]} />
+        <AuthenticatedImage
+          uri={uri}
+          style={[styles.avatarImage, { width: size, height: size, borderRadius: size / 2 }]}
+        />
       ) : (
         <View
           style={[

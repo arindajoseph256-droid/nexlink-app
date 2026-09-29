@@ -22,7 +22,7 @@ function requireModule(mod, feature) {
   return mod;
 }
 
-export async function pickImage({ fromCamera = false } = {}) {
+export async function pickImage({ fromCamera = false, allowsEditing = false, aspect = [1, 1] } = {}) {
   const picker = requireModule(ImagePicker, 'Image picking');
   const permission = fromCamera
     ? await picker.requestCameraPermissionsAsync()
@@ -30,9 +30,14 @@ export async function pickImage({ fromCamera = false } = {}) {
   if (permission.status !== 'granted') {
     throw new Error('Permission denied. Enable it in Settings to send photos.');
   }
+  const baseOptions = {
+    quality: 0.7,
+    mediaTypes: ['images'],
+    ...(allowsEditing ? { allowsEditing: true, aspect } : {}),
+  };
   const result = fromCamera
-    ? await picker.launchCameraAsync({ quality: 0.7 })
-    : await picker.launchImageLibraryAsync({ quality: 0.7, mediaTypes: ['images'] });
+    ? await picker.launchCameraAsync(baseOptions)
+    : await picker.launchImageLibraryAsync(baseOptions);
   if (result.canceled || !result.assets?.length) return null;
   const asset = result.assets[0];
   const kind = asset.type === 'video' ? 'video' : 'image';
@@ -62,7 +67,7 @@ export async function pickDocument() {
   };
 }
 
-/* --- Voice notes via expo-audio (SDK 52+ API) --- */
+/* --- Voice notes via expo-audio (SDK 57 recorder API) --- */
 
 export async function startVoiceRecording() {
   const audio = requireModule(ExpoAudio, 'Voice recording');
@@ -70,11 +75,17 @@ export async function startVoiceRecording() {
   if (permission.status !== 'granted') {
     throw new Error('Microphone permission denied. Enable it in Settings to record voice notes.');
   }
-  const recorder = audio.useAudioRecorder; // documented hook API lives in the hook; module API below
-  void recorder;
-  const recording = await audio.createRecordingPlayer?.();
-  void recording;
-  throw new Error('Voice recording requires the recorder hook (handled in the composer component).');
+  const file = new audio.AudioRecorder.DocumentDirectoryURI(`voice-${Date.now()}.m4a`);
+  const recorder = new audio.AudioRecorder();
+  recorder.record(file);
+  return { recorder, file };
+}
+
+export async function stopVoiceRecording(recorder) {
+  const audio = requireModule(ExpoAudio, 'Voice recording');
+  const uri = await recorder.stop();
+  void audio;
+  return { kind: 'audio', file: { uri, name: `voice-${Date.now()}.m4a`, mimeType: 'audio/mp4' } };
 }
 
 export function audioModulesAvailable() {

@@ -1,7 +1,7 @@
 import React, { useCallback, useContext, useEffect, useMemo, useState } from 'react';
-import { FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useNavigation } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 
 import {
   connectionState,
@@ -15,10 +15,10 @@ import {
   clearChat,
 } from '../api';
 import { ConversationItem } from '../components/ConversationItem';
+import { NotificationsModal } from '../components/NotificationsModal';
 import { SearchBar } from '../components/SearchBar';
 import { Avatar, LoadingState } from '../components/ui';
-import { nexlinkIcon } from '../branding';
-import { notificationsAvailable } from '../services/notifications';
+import { onRealtimeEvent } from '../services/realtimeBus';
 import { onForegroundSync } from '../services/syncService';
 import { ThemeContext } from '../theme/ThemeProvider';
 import { friendlyError } from '../utils/errors';
@@ -32,6 +32,7 @@ export function ConversationsScreen({ user, onLogout }) {
   const [searchResults, setSearchResults] = useState([]);
   const [query, setQuery] = useState('');
   const [notifCount, setNotifCount] = useState(0);
+  const [notifOpen, setNotifOpen] = useState(false);
   const [online, setOnline] = useState(connectionState.online);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -49,12 +50,32 @@ export function ConversationsScreen({ user, onLogout }) {
   }, []);
 
   const refreshNotifications = useCallback(async () => {
-    if (!notificationsAvailable()) return;
     try {
       const data = await getNotifications();
       setNotifCount(data.unread || 0);
     } catch {}
   }, []);
+
+  /* Notifications tap → resolve the conversation from the list (single-conversation
+     GET is not part of the API; the list is cheap and already cached by the client). */
+  const openConversationById = useCallback(
+    async (conversationId) => {
+      try {
+        const data = await getConversations();
+        const list = Array.isArray(data) ? data : data.results || [];
+        setConversations(list);
+        const conversation = list.find((item) => String(item.id) === String(conversationId));
+        if (conversation) {
+          navigation.navigate('Chat', { conversation });
+          return;
+        }
+        Alert.alert('Nexlink', 'That conversation is no longer available.');
+      } catch (err) {
+        Alert.alert('Nexlink', friendlyError(err));
+      }
+    },
+    [navigation],
+  );
 
   useEffect(() => {
     refresh();
@@ -69,6 +90,20 @@ export function ConversationsScreen({ user, onLogout }) {
       offSync();
     };
   }, [refresh, refreshNotifications]);
+
+  /* realtime fan-out: list + unread badge refresh while this screen is focused */
+  useFocusEffect(
+    useCallback(() => {
+      refresh();
+      refreshNotifications();
+      const offRealtime = onRealtimeEvent((event) => {
+        const type = event?.type;
+        if (type === 'conversation.new' || type === 'message.new' || type === 'notification.event') refresh();
+        if (type === 'notification.event' || type === 'message.new') refreshNotifications();
+      });
+      return offRealtime;
+    }, [refresh, refreshNotifications]),
+  );
 
   const phoneCandidate = useMemo(() => {
     const digits = query.replace(/[^\d+]/g, '');
@@ -120,9 +155,7 @@ export function ConversationsScreen({ user, onLogout }) {
   }
 
   function openNotifications() {
-    navigation.navigate('Settings');
-    markNotificationsRead().catch(() => {});
-    setNotifCount(0);
+    setNotifOpen(true);
   }
 
   const styles = makeStyles(colors, accent);
@@ -210,6 +243,15 @@ export function ConversationsScreen({ user, onLogout }) {
           )}
         </>
       )}
+
+      <NotificationsModal
+        visible={notifOpen}
+        onClose={() => {
+          setNotifOpen(false);
+          refreshNotifications();
+        }}
+        onOpenConversation={openConversationById}
+      />
     </SafeAreaView>
   );
 }
