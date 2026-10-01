@@ -11,7 +11,8 @@ import {
   View,
 } from 'react-native';
 
-import { API_BASE_URL, login } from '../api/auth';
+import { login } from '../api/auth';
+import { API_BASE_URL, APP_VERSION_LABEL } from '../api';
 import { ErrorText, LoadingState } from '../components/ui';
 import { ThemeContext } from '../theme/ThemeProvider';
 import { friendlyError } from '../utils/errors';
@@ -108,6 +109,8 @@ export function LoginScreen({ navigation, onAuthenticated }) {
             <Text style={{ color: colors.muted, fontSize: 13 }}>Forgot password?</Text>
           </TouchableOpacity>
         </View>
+
+        <Text style={styles.versionText}>{APP_VERSION_LABEL}</Text>
       </ScrollView>
     </KeyboardAvoidingView>
   );
@@ -148,5 +151,6 @@ function makeStyles(colors, accent) {
     button: { borderRadius: 12, paddingVertical: 13, alignItems: 'center', marginTop: 18 },
     buttonText: { color: '#071d22', fontWeight: '800', fontSize: 15 },
     linkRow: { flexDirection: 'row', justifyContent: 'center', marginTop: 14 },
+    versionText: { color: 'rgba(242,255,251,0.45)', fontSize: 11, textAlign: 'center', letterSpacing: 0.5 },
   });
 }

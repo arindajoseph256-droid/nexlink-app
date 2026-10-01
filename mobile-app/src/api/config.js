@@ -40,6 +40,15 @@ export const API_BASE_URL = usingConfiguredUrl ? configured : PRODUCTION_API_URL
 /** Always wss:// in production (https→wss, http→ws only for dev overrides). */
 export const WS_BASE_URL = API_BASE_URL.replace(/^http/, 'ws');
 
+/**
+ * Release identity shown in the UI (login + account footers) and sent to
+ * /api/mobile/version/. Keep in sync with expo.version / expo.android.versionCode
+ * in app.json — the footers are how you can *prove* a fresh APK is installed.
+ */
+export const APP_VERSION = '1.2.0';
+export const APP_BUILD = 3;
+export const APP_VERSION_LABEL = `Nexlink ${APP_VERSION} (build ${APP_BUILD})`;
+
 export const configDiagnostics = {
   configuredUrl: configured || null,
   resolvedUrl: API_BASE_URL,

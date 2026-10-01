@@ -5,6 +5,7 @@ import { useNavigation } from '@react-navigation/native';
 
 import { getMe, updateProfile } from '../api/auth';
 import { uploadAvatar } from '../api/auth';
+import { API_BASE_URL, APP_VERSION_LABEL } from '../api';
 import { pickImage } from '../services/media';
 import { Avatar, ErrorText, SectionTitle } from '../components/ui';
 import { ThemeContext } from '../theme/ThemeProvider';
@@ -109,6 +110,10 @@ export function AccountSettingsScreen({ user, onUserUpdated }) {
         <TouchableOpacity onPress={save} disabled={busy} style={[styles.saveButton, { backgroundColor: accent }]}>
           <Text style={styles.saveText}>{busy ? 'Saving…' : 'Save changes'}</Text>
         </TouchableOpacity>
+
+        <Text style={[styles.versionText, { color: colors.muted }]}>
+          {APP_VERSION_LABEL} · {API_BASE_URL.replace(/^https?:\/\//, '')}
+        </Text>
       </View>
     </SafeAreaView>
   );
@@ -127,5 +132,6 @@ function makeStyles(colors, accent) {
     input: { borderWidth: 1, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 11, fontSize: 15 },
     saveButton: { borderRadius: 12, paddingVertical: 13, alignItems: 'center', marginTop: 18 },
     saveText: { color: '#071d22', fontWeight: '800', fontSize: 15 },
+    versionText: { fontSize: 11, textAlign: 'center', marginTop: 18 },
   });
 }
