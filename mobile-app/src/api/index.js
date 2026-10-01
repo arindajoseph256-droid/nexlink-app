@@ -1,4 +1,13 @@
-export { API_BASE_URL, WS_BASE_URL, PRODUCTION_API_URL, configDiagnostics, usingConfiguredUrl } from './config';
+export {
+  API_BASE_URL,
+  WS_BASE_URL,
+  PRODUCTION_API_URL,
+  configDiagnostics,
+  usingConfiguredUrl,
+  APP_VERSION,
+  APP_BUILD,
+  APP_VERSION_LABEL,
+} from './config';
 export {
   request,
   connectionState,
