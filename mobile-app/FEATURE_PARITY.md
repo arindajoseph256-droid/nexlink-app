@@ -51,11 +51,11 @@ actually does today — nothing aspirational, nothing hidden.
 | Star / pin messages | ✅ | ✅ | ✅ DONE | Long-press actions; ★/📌 shown on bubble |
 | Long-press action sheet | ✅ | ✅ | ✅ DONE | react/reply/star/pin/copy/edit/delete×2/download |
 | Offline outbox (queue + auto-flush) | ✅ | ✅ | ✅ DONE | SecureStore, `client_id` dedupe, flush on reconnect/foreground |
-| Starred-messages list screen | ✅ | 🔴 | 🔴 MISSING | API wrapper `getStarredMessages()` exists; needs a Starred screen + navigation entry |
-| Message-history text search | ✅ (dashboard filters) | ⛔ | ⛔ BLOCKED — backend | No server endpoint for text search; web uses dashboard filters, not a search API |
+| Starred-messages list screen | ✅ | ✅ | 🟡 DONE (code) | `StarredMessagesScreen` — list, open chat, unstar; entry in Settings → Chats |
+| Message-history text search | ✅ | ✅ | 🟡 DONE (code) | server endpoint `/api/search/messages/`; PEOPLE + 💬 MESSAGE sections in the chats search bar |
 | Message context in notifications inbox | ✅ | ✅ | ✅ DONE | `/api/notifications/` list, per-item mark-read, tap → chat |
 
-**Remaining work:** Starred screen (small); message-search endpoint (backend decision).
+**Remaining work: none** (device test pass still pending for the new screens).
 
 ## 3. Conversations
 
@@ -71,13 +71,13 @@ actually does today — nothing aspirational, nothing hidden.
 | Block / unblock user | ✅ | ✅ | ✅ DONE | server-enforced |
 | Pull-to-refresh | ➖ | ✅ | ✅ DONE | |
 | Realtime list refresh | ✅ | ✅ | ✅ DONE | event bus + focus re-validation |
-| Filter chips (All/Unread/Pinned/Groups/Archived) | ✅ | 🔴 | 🔴 MISSING | State mutations exist; needs the filter row UI over the list |
-| Contacts screen | ✅ | 🔴 | 🔴 MISSING | `getContacts()` wrapper exists; needs Contacts screen + entry point |
-| Shared-media grid per chat | ✅ | 🔴 | 🔴 MISSING | `getConversationMedia()` wrapper exists; needs Media screen (typically opened from chat header) |
-| Report user | ✅ | 🔴 | 🔴 MISSING | `reportUser()` wrapper exists; hook it into the chat ⋮ menu |
+| Filter chips (All/Unread/Pinned/Groups/Archived) | ✅ | ✅ | 🟡 DONE (code) | chip row over the list, same archived/pinned/unread/groups semantics as `nexus.js` |
+| Contacts screen | ✅ | ✅ | 🟡 DONE (code) | `ContactsScreen` — list, tap → chat, remove; 👥 header entry + Settings row |
+| Shared-media grid per chat | ✅ | ✅ | 🟡 DONE (code) | `SharedMediaScreen` (Media/Links/Docs tabs) from the chat ⋮ menu |
+| Report user | ✅ | ✅ | 🟡 DONE (code) | same five reasons as web, hooked into the chat ⋮ menu; server also blocks |
 | Group vs DM routing | ✅ | ✅ | ✅ DONE | |
 
-**Remaining work:** filter chips, contacts screen, media grid, report-user hook (all small, all API-ready).
+**Remaining work: none** (device test pass still pending for the new screens).
 
 ## 4. Groups
 
@@ -87,11 +87,11 @@ actually does today — nothing aspirational, nothing hidden.
 | Group messaging | ✅ | ✅ | ✅ DONE | same WS rooms; sender labels |
 | Group profile / members list | ✅ | ✅ | ✅ DONE | |
 | Leave group | ✅ | ✅ | ✅ DONE | |
-| Add member | ✅ | 🔴 | 🔴 MISSING | backend endpoints exist (`/api/conversations/<id>/members/…`) |
-| Remove / promote / demote member (admin) | ✅ | 🔴 | 🔴 MISSING | same — needs member-management UI |
-| Edit group name/description | ✅ | 🔴 | 🔴 MISSING | backend supports it; small screen |
+| Add member | ✅ | ✅ | 🟡 DONE (code) | `GroupAdminScreen` (admin-only picker) → `POST /api/groups/<id>/members/` |
+| Remove / promote / demote member (admin) | ✅ | 🟠 | 🟠 PARTIAL | remove + promote implemented and admin-gated; **demote has no backend endpoint** (web exposes it too but the server only supports promote) |
+| Edit group name/description | ✅ | ✅ | 🟡 DONE (code) | admin-only PATCH `/api/groups/<id>/` from `GroupAdminScreen` |
 
-**Remaining work:** group admin screens (create/leave done; member management + rename open).
+**Remaining work:** member demote (needs a backend endpoint decision); otherwise done.
 
 ## 5. Profiles
 
@@ -102,10 +102,10 @@ actually does today — nothing aspirational, nothing hidden.
 | Avatar render (authenticated) | ✅ | ✅ | ✅ DONE | `AuthenticatedImage` + `?token=` — fixed this session |
 | Phone number (masked) | ✅ | ✅ | ✅ DONE | search results + profile |
 | Online status / last seen | ✅ | ✅ | ✅ DONE | |
-| Email change | ✅ | 🔴 | 🔴 MISSING | web has it in settings; mobile Account screen doesn't yet (backend endpoint exists) |
-| Change password | ✅ | 🔴 | 🔴 MISSING | same — web-only today; add mobile screen using the server page or API |
+| Email change | ✅ | ✅ | 🟡 DONE (code) | `ChangeEmailScreen` → `POST /api/auth/email-change/` (uniqueness enforced server-side; tests added) |
+| Change password | ✅ | ✅ | 🟡 DONE (code) | `ChangePasswordScreen` → `POST /api/auth/password-change/` (Django PasswordChangeForm; tests added) |
 
-**Remaining work:** email + password change screens on mobile.
+**Remaining work: none.**
 
 ## 6. Settings (all synced to `/api/auth/preferences/` unless noted)
 
@@ -120,10 +120,10 @@ actually does today — nothing aspirational, nothing hidden.
 | Privacy: typing indicator | ✅ | ✅ | ✅ DONE | |
 | Privacy: last seen | ✅ | ✅ | ✅ DONE | |
 | Chats: enter-to-send | ✅ | ✅ | ✅ DONE | local persistence (instant) + server sync |
-| Presence status (available/busy/away/dnd/invisible) | ✅ | 🔴 | 🔴 MISSING | pref syncs via API; needs a status picker row in Account/Privacy screen |
+| Presence status (available/busy/away/dnd/invisible) | ✅ | ✅ | 🟡 DONE (code) | status chips in Settings → Privacy, synced via `/api/auth/preferences/` |
 | Theme from server on login | ✅ | ✅ | ✅ DONE | two-way sync verified in Appearance screen |
 
-**Remaining work:** presence-status picker (small).
+**Remaining work: none.**
 
 ## 7. Calls
 
@@ -133,9 +133,9 @@ actually does today — nothing aspirational, nothing hidden.
 | Incoming ring / accept / decline / end | ✅ | ✅ | 🟡 DONE (code) | `call.*` WS events drive the full-screen modal |
 | Signaling (offer/answer/ICE relay) | ✅ | ✅ | ✅ DONE | `/api/calls/<id>/signal/` reachable from client |
 | P2P audio/video media | ✅ (browser WebRTC) | ⛔ | ⛔ BLOCKED — native module | needs react-native-webrtc (or similar) via EAS + two-device test. CallScreen states this honestly |
-| Call history screen | ✅ | 🔴 | 🔴 MISSING | `getCallHistory()` wrapper exists; needs the screen (e.g. from Profile) |
+| Call history screen | ✅ | ✅ | 🟡 DONE (code) | `CallHistoryScreen` (`getCallHistory()`), entry in Settings → Calls |
 
-**Remaining work:** history screen (small); media path (blocked as above).
+**Remaining work:** media path (blocked as above); on-device call test.
 
 ## 8. Notifications
 
@@ -156,20 +156,20 @@ actually does today — nothing aspirational, nothing hidden.
 | Feature | Web | Android | Status | Notes / remaining work |
 | --- | :-: | :-: | --- | --- |
 | Gallery image picking | ✅ | ✅ | ✅ DONE | expo-image-picker |
-| Camera capture (chat) | ✅ | 🔴 | 🔴 MISSING | picker supports `fromCamera: true`; composer needs a camera button |
+| Camera capture (chat) | ✅ | ✅ | 🟡 DONE (code) | 📷 composer button → `pickImage({ fromCamera: true })` (permission handled in media service) |
 | Document attachments | ✅ | ✅ | ✅ DONE | expo-document-picker |
 | Media upload (image/video/audio/file) | ✅ | ✅ | ✅ DONE | multipart, 25MB cap, type whitelist enforced server-side |
 | Image display in chat | ✅ | ✅ | ✅ DONE | `AuthenticatedImage` (token-fixed this session) |
-| Image tap → full-screen viewer | ✅ | 🔴 | 🔴 MISSING | tap currently downloads/shares; add a viewer screen |
+| Image tap → full-screen viewer | ✅ | ✅ | ✅ DONE | `ImageViewerModal` (zoomable, download) on tap — PR #3 |
 | Image/video/audio/file download | ✅ | ✅ | ✅ DONE | authenticated GET + Android share sheet |
 | Voice notes: record + send | ✅ | 🟡 | 🟡 DONE (code) | expo-audio recorder → `sendAttachment('audio')` |
 | Voice notes: playback | ✅ | 🟡 | 🟡 DONE (code) | in-bubble player (play/pause + progress) |
 | Inline video player | ✅ | 🟠 | 🟠 PARTIAL | tap opens system player; inline expo-video player is a polish item |
 | User search | ✅ | ✅ | ✅ DONE | server-backed |
 | Conversation search | ✅ | ✅ | ✅ DONE | local list filter mirrors web's quick filter |
-| Message text search | ✅ (filters) | ⛔ | ⛔ BLOCKED — backend | no endpoint (see §2) |
+| Message text search | ✅ (filters) | ✅ | 🟡 DONE (code) | in-chat search (client-side, like web) + global message search via `/api/search/messages/` |
 
-**Remaining work:** camera button, image viewer, inline video (all small).
+**Remaining work:** inline video player polish (small).
 
 ## 10. Platform / infrastructure
 
@@ -191,23 +191,21 @@ actually does today — nothing aspirational, nothing hidden.
 ## Consolidated remaining-work list (by size)
 
 **Small UI jobs (API ready):**
-1. Filter chips over the conversation list (All/Unread/Pinned/Groups/Archived)
-2. Starred-messages screen (`getStarredMessages()` ready)
-3. Contacts screen (`getContacts()` ready)
-4. Call-history screen (`getCallHistory()` ready)
-5. Shared-media grid per chat (`getConversationMedia()` ready)
-6. Group member management (add/remove/promote/rename)
-7. Presence-status picker (available/busy/away/dnd/invisible)
-8. Email + password change screens
-9. Camera capture button in composer
-10. Full-screen image viewer
-11. Report-user hook in chat menu
+1. Inline video player (tap currently opens the system player) — polish only
+2. Group member *demote* (needs a backend endpoint; promote/remove/rename done)
+3. Full screen-reader/accessibility audit (labels + touch targets already in place)
+
+**Done this pass (code complete, 🟡 needs device test):** filter chips, starred
+screen, contacts screen, call history, shared-media grid, group admin
+(add/remove/promote/rename), presence-status picker, email + password change
+screens, camera capture button, report-user hook, message search (global +
+in-chat), full-screen image viewer (PR #3).
 
 **Device/account-dependent (cannot be closed from this machine):**
-- On-device verification pass: reactions, avatar crop, downloads/share sheet, voice notes, push delivery (needs an installed APK + two accounts)
+- On-device verification pass: reactions, avatar crop, downloads/share sheet, voice notes, push delivery,
+  and every 🟡 row above (needs an installed APK + two accounts)
 - FCM credentials for push in production APK builds (expo.dev account action)
 - `eas init` to activate OTA delivery (replaces the documented placeholder project ID)
 
-**Blocked — needs a decision/module:**
+**Blocked — needs a module/decision:**
 - Call P2P media: native WebRTC module via EAS, then two-device testing
-- Message-history text search: new backend endpoint (or port the dashboard-filter model)

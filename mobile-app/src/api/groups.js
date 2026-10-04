@@ -11,6 +11,13 @@ export function getGroupDetail(conversationId) {
   return request(`/api/groups/${conversationId}/`);
 }
 
+export function updateGroup(conversationId, patch) {
+  return request(`/api/groups/${conversationId}/`, {
+    method: 'PATCH',
+    body: JSON.stringify(patch),
+  });
+}
+
 export function leaveGroup(conversationId) {
   return request(`/api/groups/${conversationId}/leave/`, { method: 'POST' });
 }

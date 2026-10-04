@@ -8,10 +8,20 @@ import { ErrorText, SettingsSwitch, SectionTitle } from '../components/ui';
 import { ThemeContext } from '../theme/ThemeProvider';
 import { friendlyError } from '../utils/errors';
 
+/* Same presence flow as the web status picker. */
+const STATUSES = [
+  ['available', 'Available'],
+  ['busy', 'Busy'],
+  ['away', 'Away'],
+  ['dnd', 'Do not disturb'],
+  ['invisible', 'Invisible'],
+];
+
 export function PrivacySettingsScreen() {
   const navigation = useNavigation();
   const theme = useContext(ThemeContext);
   const colors = theme?.colors || {};
+  const accent = theme?.accent || '#74ffd6';
   const [prefs, setPrefs] = useState(null);
   const [error, setError] = useState('');
 
@@ -30,6 +40,19 @@ export function PrivacySettingsScreen() {
       setError('');
     } catch (err) {
       setPrefs(prefs);
+      setError(friendlyError(err));
+    }
+  }
+
+  async function pickStatus(status) {
+    const previous = prefs.status;
+    setPrefs((current) => ({ ...current, status }));
+    try {
+      const saved = await updatePreferences({ status });
+      setPrefs((current) => ({ ...current, ...saved }));
+      setError('');
+    } catch (err) {
+      setPrefs((current) => ({ ...current, status: previous }));
       setError(friendlyError(err));
     }
   }
@@ -66,6 +89,30 @@ export function PrivacySettingsScreen() {
               value={prefs.last_seen_visible}
               onValueChange={() => toggle('last_seen_visible')}
             />
+
+            <SectionTitle>Presence status</SectionTitle>
+            <View style={styles.statusWrap}>
+              {STATUSES.map(([key, label]) => {
+                const active = prefs.status === key;
+                return (
+                  <TouchableOpacity
+                    key={key}
+                    style={[
+                      styles.statusChip,
+                      {
+                        backgroundColor: active ? accent : colors.surface,
+                        borderColor: active ? accent : colors.border,
+                      },
+                    ]}
+                    onPress={() => pickStatus(key)}
+                  >
+                    <Text style={{ color: active ? '#071d22' : colors.text, fontWeight: '700', fontSize: 13 }}>
+                      {label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
           </>
         ) : (
           <Text style={{ color: colors.muted, paddingHorizontal: 16, paddingTop: 12 }}>Loading…</Text>
@@ -83,5 +130,7 @@ function makeStyles(colors) {
     backText: { fontSize: 22 },
     headerTitle: { fontSize: 20, fontWeight: '800' },
     body: { paddingBottom: 32 },
+    statusWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingHorizontal: 14, paddingTop: 4 },
+    statusChip: { borderWidth: 1, borderRadius: 999, paddingHorizontal: 14, paddingVertical: 8 },
   });
 }

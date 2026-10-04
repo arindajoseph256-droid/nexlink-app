@@ -50,6 +50,33 @@ export function SettingsScreen({ user, onLogout }) {
           description="Name, about and avatar"
           onPress={() => navigation.navigate('Profile')}
         />
+        <SettingsRow
+          label="Change email"
+          description={user?.email || 'No email set — add one for password resets'}
+          onPress={() => navigation.navigate('ChangeEmail')}
+        />
+        <SettingsRow
+          label="Change password"
+          description="Update your account password"
+          onPress={() => navigation.navigate('ChangePassword')}
+        />
+
+        <SectionTitle>Chats</SectionTitle>
+        <SettingsRow
+          label="Starred messages"
+          description="Everything you starred, in one list"
+          onPress={() => navigation.navigate('StarredMessages')}
+        />
+        <SettingsRow
+          label="Contacts"
+          description="People you have saved"
+          onPress={() => navigation.navigate('Contacts')}
+        />
+        <SettingsRow
+          label="Enter to send"
+          description="Keyboard behaviour in chats"
+          onPress={() => navigation.navigate('ChatSettings')}
+        />
 
         <SectionTitle>Appearance</SectionTitle>
         <SettingsRow
@@ -72,11 +99,11 @@ export function SettingsScreen({ user, onLogout }) {
           onPress={() => navigation.navigate('PrivacySettings')}
         />
 
-        <SectionTitle>Chats</SectionTitle>
+        <SectionTitle>Calls</SectionTitle>
         <SettingsRow
-          label="Enter to send"
-          description="Keyboard behaviour in chats"
-          onPress={() => navigation.navigate('ChatSettings')}
+          label="Call history"
+          description="Recent incoming and outgoing calls"
+          onPress={() => navigation.navigate('CallHistory')}
         />
 
         <SectionTitle>App</SectionTitle>
