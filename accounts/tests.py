@@ -449,3 +449,72 @@ class AccountChangeApiTests(TestCase):
             content_type='application/json',
         )
         self.assertIn(response.status_code, (401, 403))
+
+
+class AccountBackupApiTests(TestCase):
+    """Account backup download + email-to-recovery-address endpoints."""
+
+    def setUp(self):
+        from rest_framework.authtoken.models import Token
+        self.user = User.objects.create_user(
+            phone_number='+14155550811', email='backup@example.com',
+            password='Sup3r-Secret-Pass!',
+        )
+        self.auth = f'Token {Token.objects.create(user=self.user).key}'
+
+    def _get(self, url):
+        return self.client.get(url, HTTP_AUTHORIZATION=self.auth)
+
+    def _post(self, url):
+        return self.client.post(
+            url, {}, content_type='application/json', HTTP_AUTHORIZATION=self.auth,
+        )
+
+    def test_backup_requires_auth(self):
+        response = self.client.get('/api/auth/backup/')
+        self.assertIn(response.status_code, (401, 403))
+
+    def test_backup_contains_account_profile_and_messages(self):
+        from messaging.models import Conversation
+        peer = User.objects.create_user(
+            phone_number='+14155550812', password='Xx123456!',
+        )
+        conversation, _ = Conversation.get_or_create_between(self.user, peer)
+        conversation.messages.create(sender=self.user, body='hello backup')
+
+        response = self._get('/api/auth/backup/')
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data['schema'], 'nexlink.backup.v1')
+        self.assertEqual(data['account']['email'], 'backup@example.com')
+        self.assertEqual(data['counts']['conversations'], 1)
+        bodies = [
+            message['body']
+            for item in data['conversations']
+            for message in item['messages']
+        ]
+        self.assertIn('hello backup', bodies)
+        self.assertIn('preferences', data)
+        self.assertIn('contacts', data)
+
+    def test_backup_email_sent_to_recovery_email(self):
+        from django.core import mail
+        response = self._post('/api/auth/backup/email/')
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload['email'], 'backup@example.com')
+        self.assertTrue(payload['sent'])
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertEqual(mail.outbox[0].to, ['backup@example.com'])
+        filename, content, mimetype = mail.outbox[0].attachments[0]
+        self.assertTrue(filename.endswith('.json'))
+        self.assertEqual(mimetype, 'application/json')
+        raw = content.encode() if isinstance(content, str) else content
+        self.assertIn(b'"nexlink.backup.v1"', raw)
+
+    def test_backup_email_requires_recovery_email(self):
+        self.user.email = ''
+        self.user.save(update_fields=['email'])
+        response = self._post('/api/auth/backup/email/')
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('detail', response.json())

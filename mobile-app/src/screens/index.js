@@ -17,3 +17,4 @@ export { ContactsScreen } from './ContactsScreen';
 export { SharedMediaScreen } from './SharedMediaScreen';
 export { ChangePasswordScreen } from './ChangePasswordScreen';
 export { ChangeEmailScreen } from './ChangeEmailScreen';
+export { RecoveryBackupScreen } from './RecoveryBackupScreen';

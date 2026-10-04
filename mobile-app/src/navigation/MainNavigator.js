@@ -16,6 +16,7 @@ import { GroupScreen } from '../screens/GroupScreen';
 import { NotificationSettingsScreen } from '../screens/NotificationSettingsScreen';
 import { PrivacySettingsScreen } from '../screens/PrivacySettingsScreen';
 import { ProfileScreen } from '../screens/ProfileScreen';
+import { RecoveryBackupScreen } from '../screens/RecoveryBackupScreen';
 import { SettingsScreen } from '../screens/SettingsScreen';
 import { SharedMediaScreen } from '../screens/SharedMediaScreen';
 import { StarredMessagesScreen } from '../screens/StarredMessagesScreen';
@@ -64,6 +65,9 @@ export function MainNavigator({ user, onLogout, onUserUpdated }) {
       <Stack.Screen name="ChangePassword" component={ChangePasswordScreen} />
       <Stack.Screen name="ChangeEmail">
         {(props) => <ChangeEmailScreen {...props} user={user} onUserUpdated={onUserUpdated} />}
+      </Stack.Screen>
+      <Stack.Screen name="RecoveryBackup">
+        {(props) => <RecoveryBackupScreen {...props} user={user} onUserUpdated={onUserUpdated} />}
       </Stack.Screen>
       <Stack.Screen
         name="Call"

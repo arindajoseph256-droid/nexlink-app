@@ -71,7 +71,8 @@ managed processes.
   - Web pages: `views.py` + `urls.py` (register/login/settings/password reset).
   - Native API: `api_urls.py` + `api_views.py` + `api_preferences.py`
     (login, register, me/full, preferences, avatar, push,
-    **password-change**, **email-change**).
+    **password-change**, **email-change**, **backup** JSON download,
+    **backup/email** — sends the export to the recovery address).
 - `messaging/` — Conversation/Message/Call/Notification, DRF views
   (`views.py` ~1250 lines), consumers (chat + notification sockets),
   serializers (`MessageSerializer` is the single message payload shape).

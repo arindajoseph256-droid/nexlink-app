@@ -62,6 +62,16 @@ export function changeEmail(email) {
   });
 }
 
+/** Full JSON backup of the account (profile, settings, contacts, history). */
+export function getAccountBackup() {
+  return request('/api/auth/backup/');
+}
+
+/** Send the same backup as an attachment to the recovery email. */
+export function emailAccountBackup() {
+  return request('/api/auth/backup/email/', { method: 'POST' });
+}
+
 export function resetPasswordPageUrl() {
   // Handled via Linking in the auth screen; kept here for a single source of truth.
   return '/accounts/password-reset/';

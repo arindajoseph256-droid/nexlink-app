@@ -104,6 +104,7 @@ actually does today — nothing aspirational, nothing hidden.
 | Online status / last seen | ✅ | ✅ | ✅ DONE | |
 | Email change | ✅ | ✅ | 🟡 DONE (code) | `ChangeEmailScreen` → `POST /api/auth/email-change/` (uniqueness enforced server-side; tests added) |
 | Change password | ✅ | ✅ | 🟡 DONE (code) | `ChangePasswordScreen` → `POST /api/auth/password-change/` (Django PasswordChangeForm; tests added) |
+| Recovery email + account backup | ➖ (mobile-first) | ✅ | 🟡 DONE (code) | `RecoveryBackupScreen` — recovery email + `GET /api/auth/backup/` (JSON download) + `POST /api/auth/backup/email/` (emailed attachment); 4 tests |
 
 **Remaining work: none.**
 

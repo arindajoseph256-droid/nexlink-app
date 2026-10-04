@@ -60,6 +60,11 @@ export function SettingsScreen({ user, onLogout }) {
           description="Update your account password"
           onPress={() => navigation.navigate('ChangePassword')}
         />
+        <SettingsRow
+          label="Recovery email & backup"
+          description={user?.email ? `Backups go to ${user?.email}` : 'Set a recovery email, export your data'}
+          onPress={() => navigation.navigate('RecoveryBackup')}
+        />
 
         <SectionTitle>Chats</SectionTitle>
         <SettingsRow
