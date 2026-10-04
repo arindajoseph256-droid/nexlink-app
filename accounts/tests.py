@@ -380,3 +380,72 @@ class PushDeviceAPITests(TestCase):
         response = self.client.get('/health/')
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()['status'], 'ok')
+
+
+class AccountChangeApiTests(TestCase):
+    """Token-auth password/email change endpoints used by the mobile app."""
+
+    def setUp(self):
+        from rest_framework.authtoken.models import Token
+        self.user = User.objects.create_user(
+            phone_number='+14155550801', email='pat@example.com',
+            password='OldPassw0rd-Long!',
+        )
+        self.token = Token.objects.create(user=self.user).key
+        self.auth = f'Token {self.token}'
+
+    def _post(self, url, payload):
+        return self.client.post(
+            url, payload, content_type='application/json', HTTP_AUTHORIZATION=self.auth,
+        )
+
+    def test_password_change_success(self):
+        response = self._post('/api/auth/password-change/', {
+            'old_password': 'OldPassw0rd-Long!',
+            'new_password1': 'Fresh-Pass-2026!x',
+            'new_password2': 'Fresh-Pass-2026!x',
+        })
+        self.assertEqual(response.status_code, 200)
+        self.user.refresh_from_db()
+        self.assertTrue(self.user.check_password('Fresh-Pass-2026!x'))
+
+    def test_password_change_wrong_old_rejected(self):
+        response = self._post('/api/auth/password-change/', {
+            'old_password': 'Wrong-Old-Pass!',
+            'new_password1': 'Fresh-Pass-2026!x',
+            'new_password2': 'Fresh-Pass-2026!x',
+        })
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('detail', response.json())
+        self.user.refresh_from_db()
+        self.assertTrue(self.user.check_password('OldPassw0rd-Long!'))
+
+    def test_password_change_requires_auth(self):
+        response = self.client.post(
+            '/api/auth/password-change/',
+            {'old_password': 'x', 'new_password1': 'x', 'new_password2': 'x'},
+            content_type='application/json',
+        )
+        self.assertIn(response.status_code, (401, 403))
+
+    def test_email_change_success(self):
+        response = self._post('/api/auth/email-change/', {'email': 'new-pat@example.com'})
+        self.assertEqual(response.status_code, 200)
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.email, 'new-pat@example.com')
+
+    def test_email_change_duplicate_rejected(self):
+        User.objects.create_user(
+            phone_number='+14155550802', email='taken@example.com', password='Xx123456!',
+        )
+        response = self._post('/api/auth/email-change/', {'email': 'TAKEN@example.com'})
+        self.assertEqual(response.status_code, 400)
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.email, 'pat@example.com')
+
+    def test_email_change_requires_auth(self):
+        response = self.client.post(
+            '/api/auth/email-change/', {'email': 'anon@example.com'},
+            content_type='application/json',
+        )
+        self.assertIn(response.status_code, (401, 403))

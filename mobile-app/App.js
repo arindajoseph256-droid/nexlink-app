@@ -220,6 +220,16 @@ export default function App() {
     });
   }, [user, finishLogout]);
 
+  /* Local profile patches from settings screens (display name, email, avatar) */
+  const handleUserUpdated = useCallback((patch) => {
+    setUser((current) => {
+      if (!current) return current;
+      const next = { ...current, ...patch };
+      cacheUser(next).catch(() => {});
+      return next;
+    });
+  }, []);
+
   if (booting) {
     return (
       <SafeAreaView style={styles.boot}>
@@ -255,7 +265,12 @@ export default function App() {
 
   return (
     <ThemeProvider>
-      <RootNavigator user={user} onLogout={finishLogout} navigationRef={navigationRef} />
+      <RootNavigator
+        user={user}
+        onLogout={finishLogout}
+        onUserUpdated={handleUserUpdated}
+        navigationRef={navigationRef}
+      />
       {updateNotice ? (
         <UpdateNotice notice={updateNotice} onDismiss={() => setUpdateNotice(null)} />
       ) : null}

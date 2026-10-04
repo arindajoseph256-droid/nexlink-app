@@ -1,5 +1,14 @@
 import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Alert,
+  FlatList,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
 
@@ -14,6 +23,7 @@ import {
   leaveGroup,
   markRead,
   pinMessage,
+  reportUser,
   sendMessage,
   sendAttachment,
   setConversationState,
@@ -59,10 +69,13 @@ export function ChatScreen({ user }) {
   const [recording, setRecording] = useState(false);
   const [busy, setBusy] = useState(false);
   const [viewerMessage, setViewerMessage] = useState(null);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
 
   const socketRef = useRef(null);
   const typingTimer = useRef(null);
   const mountedRef = useRef(true);
+  const listRef = useRef(null);
 
   const title = conversation.kind === 'group' ? conversation.name : peer?.display_name || 'Conversation';
 
@@ -414,6 +427,17 @@ export function ChatScreen({ user }) {
         onPress: () => handleChatAction('archived', !conversation.archived),
       },
       {
+        text: '🔍 Search in this chat',
+        onPress: () => {
+          setSearchOpen(true);
+          setSearchQuery('');
+        },
+      },
+      {
+        text: '🖼 Media, links & docs',
+        onPress: () => navigation.navigate('SharedMedia', { conversation }),
+      },
+      {
         text: '🧹 Clear my view',
         style: 'destructive',
         onPress: async () => {
@@ -429,6 +453,10 @@ export function ChatScreen({ user }) {
     ];
     if (conversation.kind === 'group') {
       items.push({
+        text: '⚙️ Group settings',
+        onPress: () => navigation.navigate('GroupAdmin', { conversation }),
+      });
+      items.push({
         text: 'Leave group',
         style: 'destructive',
         onPress: async () => {
@@ -442,7 +470,7 @@ export function ChatScreen({ user }) {
       });
     } else if (peer) {
       items.push({
-        text: 'Block user',
+        text: '⛔ Block user',
         style: 'destructive',
         onPress: async () => {
           try {
@@ -454,9 +482,47 @@ export function ChatScreen({ user }) {
           }
         },
       });
+      items.push({
+        text: '🚩 Report user',
+        style: 'destructive',
+        onPress: () => reportMenu(),
+      });
     }
     items.push({ text: 'Cancel', style: 'cancel' });
     Alert.alert(title, undefined, items);
+  }
+
+  /* Same reasons as the web report menu (static/js/nexus.js). */
+  const REPORT_REASONS = [
+    ['spam', 'Spam'],
+    ['harassment', 'Harassment'],
+    ['impersonation', 'Impersonation'],
+    ['inappropriate', 'Inappropriate content'],
+    ['other', 'Something else'],
+  ];
+
+  function reportMenu() {
+    if (!peer) return;
+    Alert.alert(
+      `Report ${peer.display_name || 'user'}`,
+      'Reporting also blocks the person from contacting you.',
+      [
+        ...REPORT_REASONS.map(([reason, label]) => ({
+          text: label,
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await reportUser(peer.id, reason);
+              Alert.alert('Nexlink', 'Report sent — contact blocked.');
+              navigation.goBack();
+            } catch (err) {
+              setError(friendlyError(err));
+            }
+          },
+        })),
+        { text: 'Cancel', style: 'cancel' },
+      ],
+    );
   }
 
   async function handleChatAction(action, value) {
@@ -500,6 +566,26 @@ export function ChatScreen({ user }) {
   }
 
   const styles = makeStyles(colors, accent);
+
+  /* In-chat search mirrors the web: client-side over loaded messages. */
+  const searchHits = useMemo(() => {
+    const needle = searchQuery.trim().toLowerCase();
+    if (!needle) return [];
+    return messages.filter((m) => {
+      if (m.is_deleted) return false;
+      const haystack = `${m.body || ''} ${m.attachment_name || ''}`.toLowerCase();
+      return haystack.includes(needle);
+    });
+  }, [messages, searchQuery]);
+
+  function focusHit(message) {
+    const index = [...queued, ...messages].findIndex((m) => m.id === message.id);
+    if (index < 0 || !listRef.current) return;
+    try {
+      listRef.current.scrollToIndex({ index, animated: true, viewPosition: 0.5 });
+    } catch {}
+  }
+
   const renderRow = ({ item, index }) => {
     const prev = messages[index - 1];
     const mine = item.sender?.id === user.id || item.pending;
@@ -589,7 +675,57 @@ export function ChatScreen({ user }) {
         </View>
       )}
 
+      {searchOpen && (
+        <View style={[styles.searchBar, { backgroundColor: colors.panel }]}>
+          <TextInput
+            style={[styles.searchInput, { color: colors.text, backgroundColor: colors.surfaceAlt }]}
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            placeholder="Search in this chat…"
+            placeholderTextColor={colors.muted}
+            autoFocus
+          />
+          <Text style={[styles.searchCount, { color: colors.muted }]}>
+            {searchQuery.trim() ? `${searchHits.length} found` : ''}
+          </Text>
+          <TouchableOpacity
+            onPress={() => {
+              setSearchOpen(false);
+              setSearchQuery('');
+            }}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Text style={{ color: colors.text, fontSize: 16 }}>✕</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {searchOpen && searchQuery.trim() ? (
+        <View style={styles.hitList}>
+          {searchHits.length === 0 ? (
+            <Text style={[styles.hitEmpty, { color: colors.muted }]}>No messages match “{searchQuery.trim()}”.</Text>
+          ) : (
+            <FlatList
+              keyboardShouldPersistTaps="handled"
+              data={searchHits}
+              keyExtractor={(item) => String(item.id)}
+              renderItem={({ item }) => (
+                <TouchableOpacity style={styles.hitRow} onPress={() => focusHit(item)}>
+                  <Text style={{ color: colors.muted, fontSize: 11 }}>
+                    {item.sender?.display_name} · {fmtDay(item.created_at)}
+                  </Text>
+                  <Text style={{ color: colors.text, fontSize: 13.5 }} numberOfLines={2}>
+                    {item.body || item.attachment_name || 'Attachment'}
+                  </Text>
+                </TouchableOpacity>
+              )}
+            />
+          )}
+        </View>
+      ) : null}
+
       <FlatList
+        ref={listRef}
         data={[...queued, ...messages]}
         keyExtractor={(item, i) => String(item.id ?? item.client_id ?? i)}
         renderItem={renderRow}
@@ -597,6 +733,7 @@ export function ChatScreen({ user }) {
         contentContainerStyle={styles.messageList}
         onEndReached={loadOlder}
         onEndReachedThreshold={0.6}
+        onScrollToIndexFailed={() => {}}
         ListFooterComponent={hasMore && loadingOlder ? <ActivityIndicator style={{ margin: 10 }} color={accent} /> : null}
         ListEmptyComponent={<Text style={styles.empty}>Say hello 👋</Text>}
       />
@@ -659,6 +796,26 @@ function makeStyles(colors, accent) {
     },
     replyName: { fontSize: 12.5, fontWeight: '700' },
     messageList: { paddingVertical: 12 },
+    searchBar: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      paddingHorizontal: 10,
+      paddingVertical: 6,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomColor: '#00000022',
+    },
+    searchInput: { flex: 1, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8, fontSize: 14 },
+    searchCount: { fontSize: 11.5, fontWeight: '700' },
+    hitList: {
+      maxHeight: 190,
+      paddingHorizontal: 10,
+      paddingVertical: 6,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomColor: '#00000022',
+    },
+    hitRow: { paddingVertical: 6 },
+    hitEmpty: { fontSize: 13, paddingVertical: 8, textAlign: 'center' },
     empty: { color: colors.muted, textAlign: 'center', marginTop: 30 },
     errorText: { color: colors.danger, fontSize: 12.5, paddingHorizontal: 16, paddingVertical: 4 },
   });

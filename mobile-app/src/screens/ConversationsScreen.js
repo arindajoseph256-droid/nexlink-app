@@ -1,5 +1,5 @@
 import React, { useCallback, useContext, useEffect, useMemo, useState } from 'react';
-import { Alert, FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, FlatList, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 
@@ -8,6 +8,7 @@ import {
   getConversations,
   getNotifications,
   markNotificationsRead,
+  searchMessages,
   searchUsers,
   setConversationState,
   startConversation,
@@ -22,6 +23,16 @@ import { onRealtimeEvent } from '../services/realtimeBus';
 import { onForegroundSync } from '../services/syncService';
 import { ThemeContext } from '../theme/ThemeProvider';
 import { friendlyError } from '../utils/errors';
+import { fmtDay } from '../utils/formatting';
+
+/* Same filter set as the web dashboard (static/js/nexus.js). */
+const FILTERS = [
+  ['all', 'All'],
+  ['unread', 'Unread'],
+  ['pinned', 'Pinned'],
+  ['groups', 'Groups'],
+  ['archived', 'Archived'],
+];
 
 export function ConversationsScreen({ user, onLogout }) {
   const navigation = useNavigation();
@@ -30,6 +41,8 @@ export function ConversationsScreen({ user, onLogout }) {
   const accent = theme?.accent || '#74ffd6';
   const [conversations, setConversations] = useState([]);
   const [searchResults, setSearchResults] = useState([]);
+  const [messageResults, setMessageResults] = useState([]);
+  const [filter, setFilter] = useState('all');
   const [query, setQuery] = useState('');
   const [notifCount, setNotifCount] = useState(0);
   const [notifOpen, setNotifOpen] = useState(false);
@@ -110,13 +123,45 @@ export function ConversationsScreen({ user, onLogout }) {
     return digits.length >= 7 ? digits : null;
   }, [query]);
 
+  /* Web-equivalent list filtering: archived only shows under Archived. */
+  const filteredConversations = useMemo(() => {
+    const items = conversations.filter((conversation) => {
+      if (filter === 'archived') return conversation.archived;
+      if (conversation.archived) return false;
+      if (filter === 'unread' && !(conversation.unread_count > 0)) return false;
+      if (filter === 'pinned' && !conversation.pinned) return false;
+      if (filter === 'groups' && conversation.kind !== 'group') return false;
+      return true;
+    });
+    return [...items].sort((a, b) => Boolean(b.pinned) - Boolean(a.pinned));
+  }, [conversations, filter]);
+
+  const searchMode = query.trim().length > 0;
+  const searchItems = useMemo(() => {
+    const people = searchResults.map((person) => ({ key: `u${person.id}`, type: 'person', person }));
+    const hits = messageResults.map((message) => ({ key: `m${message.id}`, type: 'message', message }));
+    return [...people, ...hits];
+  }, [searchResults, messageResults]);
+
   async function handleSearch(text) {
     setQuery(text);
-    if (!text.trim()) return setSearchResults([]);
+    if (!text.trim()) {
+      setSearchResults([]);
+      setMessageResults([]);
+      return;
+    }
     try {
       const data = await searchUsers(text);
       setSearchResults(data.results || []);
     } catch {}
+    if (text.trim().length >= 2) {
+      try {
+        const data = await searchMessages(text);
+        setMessageResults(data.results || []);
+      } catch {
+        setMessageResults([]);
+      }
+    }
   }
 
   async function openWithUser(userId) {
@@ -124,11 +169,25 @@ export function ConversationsScreen({ user, onLogout }) {
       const conversation = await startConversation(userId);
       setConversations((current) => [conversation, ...current.filter((item) => item.id !== conversation.id)]);
       setSearchResults([]);
+      setMessageResults([]);
       setQuery('');
       navigation.navigate('Chat', { conversation });
     } catch (err) {
       setError(friendlyError(err));
     }
+  }
+
+  /* Tap a message hit → open the conversation it came from. */
+  function openMessageHit(message) {
+    const conversation = conversations.find((item) => String(item.id) === String(message.conversation_id));
+    if (conversation) {
+      setSearchResults([]);
+      setMessageResults([]);
+      setQuery('');
+      navigation.navigate('Chat', { conversation });
+      return;
+    }
+    openConversationById(message.conversation_id);
   }
 
   async function openPhoneChat(phone) {
@@ -182,6 +241,9 @@ export function ConversationsScreen({ user, onLogout }) {
             </View>
           )}
         </TouchableOpacity>
+        <TouchableOpacity style={styles.iconButton} onPress={() => navigation.navigate('Contacts')}>
+          <Text style={{ fontSize: 19 }}>👥</Text>
+        </TouchableOpacity>
         <TouchableOpacity style={styles.iconButton} onPress={() => navigation.navigate('GroupCreate')}>
           <Text style={{ fontSize: 20 }}>◎</Text>
         </TouchableOpacity>
@@ -196,40 +258,88 @@ export function ConversationsScreen({ user, onLogout }) {
         <Text style={styles.errorText}>{error}</Text>
       ) : null}
 
-      {searchResults.length > 0 ? (
+      {searchMode ? (
         <FlatList
-          data={searchResults}
-          keyExtractor={(item) => String(item.id)}
-          ListHeaderComponent={<Text style={styles.sectionTitle}>PEOPLE</Text>}
-          renderItem={({ item }) => (
-            <TouchableOpacity style={styles.personRow} onPress={() => openWithUser(item.id)}>
-              <Avatar name={item.display_name} uri={item.avatar_url} size={36} online={item.is_online} />
-              <View style={{ flex: 1, marginLeft: 10 }}>
-                <Text style={{ color: colors.text, fontWeight: '600' }}>{item.display_name}</Text>
-                {item.masked_phone ? (
-                  <Text style={{ color: colors.muted, fontSize: 12 }}>{item.masked_phone}</Text>
-                ) : null}
-              </View>
-            </TouchableOpacity>
-          )}
+          data={searchItems}
+          keyExtractor={(item) => item.key}
+          keyboardShouldPersistTaps="handled"
+          ListHeaderComponent={
+            searchItems.length === 0 && !phoneCandidate ? (
+              <Text style={styles.empty}>No people or messages match “{query.trim()}”.</Text>
+            ) : null
+          }
+          ListFooterComponent={
+            phoneCandidate ? (
+              <TouchableOpacity style={styles.phoneRow} onPress={() => openPhoneChat(phoneCandidate)}>
+                <Text style={{ color: accent, fontWeight: '700' }}>Chat with {phoneCandidate}</Text>
+              </TouchableOpacity>
+            ) : null
+          }
+          renderItem={({ item }) =>
+            item.type === 'person' ? (
+              <TouchableOpacity style={styles.personRow} onPress={() => openWithUser(item.person.id)}>
+                <Avatar name={item.person.display_name} uri={item.person.avatar_url} size={36} online={item.person.is_online} />
+                <View style={{ flex: 1, marginLeft: 10 }}>
+                  <Text style={{ color: colors.text, fontWeight: '600' }}>{item.person.display_name}</Text>
+                  {item.person.masked_phone ? (
+                    <Text style={{ color: colors.muted, fontSize: 12 }}>{item.person.masked_phone}</Text>
+                  ) : null}
+                </View>
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity style={styles.personRow} onPress={() => openMessageHit(item.message)}>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ color: colors.muted, fontSize: 11.5, fontWeight: '700' }}>
+                    💬 MESSAGE · {fmtDay(item.message.created_at)}
+                  </Text>
+                  <Text style={{ color: colors.text, fontSize: 14.5, marginTop: 2 }} numberOfLines={2}>
+                    {item.message.body}
+                  </Text>
+                </View>
+                <Text style={{ color: colors.muted, fontSize: 18 }}>›</Text>
+              </TouchableOpacity>
+            )
+          }
         />
       ) : (
         <>
-          {phoneCandidate && (
-            <TouchableOpacity style={styles.phoneRow} onPress={() => openPhoneChat(phoneCandidate)}>
-              <Text style={{ color: accent, fontWeight: '700' }}>Chat with {phoneCandidate}</Text>
-            </TouchableOpacity>
-          )}
-          <Text style={styles.sectionTitle}>CONVERSATIONS</Text>
+          <View style={styles.chipRow}>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipTrack}>
+              {FILTERS.map(([key, label]) => (
+                <TouchableOpacity
+                  key={key}
+                  style={[
+                    styles.chip,
+                    {
+                      backgroundColor: filter === key ? accent : colors.surface,
+                      borderColor: filter === key ? accent : colors.border,
+                    },
+                  ]}
+                  onPress={() => setFilter(key)}
+                >
+                  <Text style={[styles.chipText, { color: filter === key ? '#071d22' : colors.text }]}>
+                    {label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+          <Text style={styles.sectionTitle}>
+            {FILTERS.find(([key]) => key === filter)?.[1]?.toUpperCase() || 'CONVERSATIONS'}
+          </Text>
           {loading ? (
             <LoadingState label="Loading conversations…" />
           ) : (
             <FlatList
-              data={conversations}
+              data={filteredConversations}
               keyExtractor={(item) => String(item.id)}
               contentContainerStyle={styles.list}
               ListEmptyComponent={
-                <Text style={styles.empty}>No conversations yet. Search for someone to start chatting.</Text>
+                <Text style={styles.empty}>
+                  {filter === 'all'
+                    ? 'No conversations yet. Search for someone to start chatting.'
+                    : 'Nothing here — try another filter.'}
+                </Text>
               }
               renderItem={({ item }) => (
                 <ConversationItem
@@ -303,6 +413,15 @@ function makeStyles(colors, accent) {
       alignItems: 'center',
     },
     errorText: { color: colors.danger, fontSize: 12.5, paddingHorizontal: 16, paddingVertical: 4 },
+    chipRow: { paddingHorizontal: 12, marginBottom: 2 },
+    chipTrack: { gap: 8, paddingRight: 8 },
+    chip: {
+      borderWidth: 1,
+      borderRadius: 999,
+      paddingHorizontal: 14,
+      paddingVertical: 7,
+    },
+    chipText: { fontSize: 13, fontWeight: '700' },
     list: { paddingBottom: 24 },
     empty: { color: colors.muted, textAlign: 'center', marginTop: 40, marginHorizontal: 30, lineHeight: 20 },
   });

@@ -79,6 +79,42 @@ def me_api(request):
 
 @api_view(['POST'])
 @permission_classes([permissions.IsAuthenticated])
+def password_change_api(request):
+    """Change the signed-in user's password (native clients, token auth).
+
+    Mirrors the web ``accounts:password_change`` flow (Django's
+    PasswordChangeForm) so web and mobile share identical validation.
+    The DRF token stays valid — the user remains signed in on the device.
+    """
+    from django.contrib.auth.forms import PasswordChangeForm
+
+    form = PasswordChangeForm(user=request.user, data=request.data)
+    if form.is_valid():
+        form.save()
+        return Response({'status': 'ok'})
+    detail = ' '.join(str(error) for errors in form.errors.values() for error in errors)
+    return Response({'detail': detail or 'Password could not be changed.'}, status=400)
+
+
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+def email_change_api(request):
+    """Set (or clear, with an empty value) the account email address."""
+    from .forms import UserEmailForm
+
+    form = UserEmailForm(
+        data={'email': request.data.get('email') or ''},
+        instance=request.user,
+    )
+    if form.is_valid():
+        form.save()
+        return Response({'status': 'ok', 'email': request.user.email})
+    detail = ' '.join(str(error) for errors in form.errors.values() for error in errors)
+    return Response({'detail': detail or 'Email could not be updated.'}, status=400)
+
+
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
 def push_register_api(request):
     """Register this device's Expo push token for the signed-in user."""
     token = (request.data.get('token') or '').strip()

@@ -22,7 +22,10 @@ export function MessageComposer({
     if (busy) return;
     setBusy(true);
     try {
-      const result = kind === 'document' ? await pickDocument() : await pickImage({ fromCamera: false });
+      const result =
+        kind === 'document'
+          ? await pickDocument()
+          : await pickImage({ fromCamera: kind === 'camera' });
       if (result) onPick?.(result);
     } catch (error) {
       Alert.alert('Nexlink', String(error?.message || error));
@@ -35,6 +38,14 @@ export function MessageComposer({
     <View style={[styles.composer, { backgroundColor: colors.panel, borderTopColor: colors.border }]}>
       <TouchableOpacity style={styles.iconButton} onPress={() => handlePick('image')} disabled={disabled}>
         <Text style={[styles.iconText, disabled && { opacity: 0.4 }]}>🖼</Text>
+      </TouchableOpacity>
+      <TouchableOpacity
+        style={styles.iconButton}
+        onPress={() => handlePick('camera')}
+        disabled={disabled}
+        accessibilityLabel="Take a photo"
+      >
+        <Text style={[styles.iconText, disabled && { opacity: 0.4 }]}>📷</Text>
       </TouchableOpacity>
       <TouchableOpacity style={styles.iconButton} onPress={() => handlePick('document')} disabled={disabled}>
         <Text style={[styles.iconText, disabled && { opacity: 0.4 }]}>📎</Text>

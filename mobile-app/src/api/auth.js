@@ -44,6 +44,24 @@ export function uploadAvatar(file) {
   return request('/api/auth/avatar/', { method: 'POST', body: form });
 }
 
+export function changePassword(oldPassword, newPassword, confirmPassword) {
+  return request('/api/auth/password-change/', {
+    method: 'POST',
+    body: JSON.stringify({
+      old_password: oldPassword,
+      new_password1: newPassword,
+      new_password2: confirmPassword ?? newPassword,
+    }),
+  });
+}
+
+export function changeEmail(email) {
+  return request('/api/auth/email-change/', {
+    method: 'POST',
+    body: JSON.stringify({ email }),
+  });
+}
+
 export function resetPasswordPageUrl() {
   // Handled via Linking in the auth screen; kept here for a single source of truth.
   return '/accounts/password-reset/';

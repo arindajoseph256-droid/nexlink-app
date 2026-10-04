@@ -14,6 +14,10 @@ export function toggleBlockUser(userId, blocked) {
   });
 }
 
+export function removeContact(userId) {
+  return request(`/api/contacts/${userId}/`, { method: 'DELETE' });
+}
+
 export function reportUser(userId, reason) {
   return request(`/api/users/${userId}/report/`, {
     method: 'POST',

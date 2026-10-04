@@ -65,3 +65,8 @@ export function pinMessage(messageId) {
 export function getStarredMessages() {
   return request('/api/messages/starred/');
 }
+
+/** Server-side message search across the viewer's conversations (max 50 hits). */
+export function searchMessages(query) {
+  return request(`/api/search/messages/?q=${encodeURIComponent(query)}`);
+}
