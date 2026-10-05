@@ -12,6 +12,10 @@ import { WS_BASE_URL } from '../api/config';
 import { connectionState, getAuthToken } from '../api/client';
 
 const MAX_BACKOFF_MS = 15000;
+// Presence heartbeat: keeps the server's is_online flag fresh. Without it,
+// a killed app (no graceful disconnect) leaves the user marked online
+// forever and the server then suppresses push notifications.
+const PING_INTERVAL_MS = 45000;
 
 class ManagedSocket {
   /**
@@ -33,6 +37,7 @@ class ManagedSocket {
     const token = getAuthToken();
     if (!token) return;
     this.closedByUser = false;
+    this.stopPing();
 
     let socket;
     try {
@@ -47,6 +52,7 @@ class ManagedSocket {
       this.attempt = 0;
       this.reconnecting = false;
       connectionState.set({ socket: true });
+      this.startPing();
       this.handlers.onOpen?.();
     };
 
@@ -61,6 +67,7 @@ class ManagedSocket {
     };
 
     socket.onclose = () => {
+      this.stopPing();
       this.socket = null;
       connectionState.set({ socket: false });
       if (this.closedByUser) return;
@@ -80,6 +87,20 @@ class ManagedSocket {
       this.reconnecting = false;
       this.connect();
     }, delay);
+  }
+
+  startPing() {
+    this.stopPing();
+    this.pingTimer = setInterval(() => {
+      this.send({ type: 'presence.ping' });
+    }, PING_INTERVAL_MS);
+  }
+
+  stopPing() {
+    if (this.pingTimer) {
+      clearInterval(this.pingTimer);
+      this.pingTimer = null;
+    }
   }
 
   send(payload) {
@@ -108,6 +129,7 @@ class ManagedSocket {
 
   close() {
     this.closedByUser = true;
+    this.stopPing();
     clearTimeout(this.retryTimer);
     this.reconnecting = false;
     try {

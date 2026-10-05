@@ -240,40 +240,53 @@ class MessageListCreateView(generics.ListCreateAPIView):
         self._deliver(message)
 
     def _notify_offline(self, recipients, message):
-        """Push-notify recipients not currently connected over WebSocket.
+        """Deliver real device notifications for a new message.
 
-        Delivers through every registered channel (Expo push for the APK,
-        Web Push for browsers/PWAs) in one fan-out.
+        Per-channel gating ("logged in anywhere = notified everywhere"):
+        - Web Push goes to EVERY recipient with a browser subscription,
+          regardless of WebSocket presence. Presence is unreliable for
+          this purpose (stale online flags after ungraceful disconnects,
+          background tabs keeping users marked online), and the service
+          worker already suppresses the OS popup when a Nexlink tab is
+          focused — so delivery must not depend on it.
+        - Expo push (APK) stays gated on presence: the app shows its own
+          in-app/foreground notifications, so push is only needed while
+          the app is not connected.
+        Both channels honor each user's notifications_enabled preference.
         """
-        from accounts.push import notify_devices
+        from accounts.push import send_push
+        from accounts.webpush import send_web_push
 
+        recipient_ids = [p.user_id for p in recipients]
+        if not recipient_ids:
+            return
+        prefs_by_user = {
+            prefs.user_id: prefs
+            for prefs in UserPreferences.objects.filter(user_id__in=recipient_ids)
+        }
+
+        def _wants(uid):
+            prefs = prefs_by_user.get(uid)
+            return prefs is None or prefs.notifications_enabled
+
+        web_targets = [uid for uid in recipient_ids if _wants(uid)]
         offline_ids = [
             p.user_id for p in recipients
             if not getattr(p.user, 'profile', None)
             or not p.user.profile.is_online
         ]
-        if not offline_ids:
+        expo_targets = [uid for uid in offline_ids if _wants(uid)]
+        if not web_targets and not expo_targets:
             return
-        prefs_by_user = {
-            prefs.user_id: prefs
-            for prefs in UserPreferences.objects.filter(user_id__in=offline_ids)
-        }
-        targets = [
-            uid for uid in offline_ids
-            if prefs_by_user.get(uid) is None
-            or prefs_by_user[uid].notifications_enabled
-        ]
-        if not targets:
-            return
+
         sender_name = self.request.user.get_display_name()
         excerpt = (message.body or '').strip()[:180]
         body_text = excerpt if excerpt else 'Sent you an attachment.'
-        notify_devices(
-            targets,
-            title=sender_name,
-            body_text=body_text,
-            data={'conversation_id': message.conversation_id},
-        )
+        data = {'conversation_id': message.conversation_id}
+        if web_targets:
+            send_web_push(web_targets, title=sender_name, body_text=body_text, data=data)
+        if expo_targets:
+            send_push(expo_targets, title=sender_name, body_text=body_text, data=data)
 
     def _deliver(self, message):
         """Mark as delivered for online recipients via the channel layer."""

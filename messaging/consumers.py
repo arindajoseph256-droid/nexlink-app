@@ -1,5 +1,6 @@
 """WebSocket consumers for realtime messaging, typing and presence."""
 import json
+from datetime import timedelta
 
 from channels.db import database_sync_to_async
 from channels.generic.websocket import AsyncJsonWebsocketConsumer
@@ -210,10 +211,19 @@ class ChatConsumer(AsyncJsonWebsocketConsumer):
     @database_sync_to_async
     def set_presence(self, is_online):
         from accounts.models import Profile
+        now = timezone.now()
         Profile.objects.filter(user=self.user).update(
             is_online=is_online,
-            last_seen=timezone.now(),
+            last_seen=now,
         )
+        # Self-healing: a stale online row (client killed without a graceful
+        # disconnect) would suppress Expo push forever. Auto-offline users
+        # whose last heartbeat is too old; actively connected sockets ping
+        # every ~45s, so 2 minutes is a safe threshold.
+        if is_online:
+            Profile.objects.filter(is_online=True, last_seen__lt=now - timedelta(seconds=120)).update(
+                is_online=False,
+            )
 
     @database_sync_to_async
     def mark_read(self, message_id):
