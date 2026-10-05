@@ -14,6 +14,7 @@ import { useNavigation, useRoute } from '@react-navigation/native';
 
 import {
   addGroupMember,
+  demoteGroupAdmin,
   getGroupDetail,
   leaveGroup,
   promoteGroupAdmin,
@@ -97,6 +98,12 @@ export function GroupAdminScreen({ user }) {
       options.push({
         text: '⭐ Promote to admin',
         onPress: () => runMemberAction(() => promoteGroupAdmin(conversation.id, member.id)),
+      });
+    }
+    if (iAmAdmin && member.is_admin && member.id !== user?.id) {
+      options.push({
+        text: 'Demote to member',
+        onPress: () => runMemberAction(() => demoteGroupAdmin(conversation.id, member.id)),
       });
     }
     if (iAmAdmin || member.id === user?.id) {

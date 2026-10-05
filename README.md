@@ -73,6 +73,10 @@ The dashboard is a full Progressive Web App:
   automatically when the connection returns
 - Connection states render in a banner: Connecting… / Reconnecting… /
   You are offline / connected (banner hides)
+- **Real push notifications (even with every tab closed):** enable in
+  Settings → Notifications → *Device notifications*. The browser stores a
+  Web Push subscription (VAPID-signed); the server wakes it for new messages
+  and incoming calls. Per-conversation stacking, tap → opens that chat.
 
 ## Project layout
 
@@ -157,6 +161,9 @@ IP; `10.0.2.2` for the Android emulator).
 | POST   | `/api/auth/avatar/` | upload profile picture |
 | POST   | `/api/auth/push/register/` | register Expo push token `{token}` |
 | POST   | `/api/auth/push/unregister/` | remove a push token (logout) |
+| GET    | `/api/auth/push/config/` | public VAPID key for Web Push subscription |
+| POST   | `/api/auth/push/subscribe/` | store browser Web Push subscription |
+| POST   | `/api/auth/push/unsubscribe/` | remove browser Web Push subscription |
 | POST   | `/api/chats/by-phone/` | start a chat from a phone number `{phone}` |
 | GET    | `/api/calls/` | call history |
 | GET    | `/health/` | unauthenticated health check (no login needed) |

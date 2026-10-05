@@ -2241,11 +2241,40 @@
                 });
             });
         } else if (id === 'notifications') {
+            var push = window.NexlinkPush;
+            var pushState = push ? push.status() : 'unsupported';
+            var pushOn = pushState === 'granted';
+            var pushDesc = {
+                granted: 'Enabled on this device — you get notifications even with Nexlink closed.',
+                denied: 'Blocked in your browser settings — allow notifications for this site first.',
+                default: 'Off — click the switch to enable real device notifications.',
+                unsupported: 'This browser does not support push notifications.',
+                insecure: 'Push needs a secure (https) connection.',
+            }[pushState] || '';
             container.innerHTML = '<h1>Notifications</h1><p>Control what you hear about and when.</p>' +
-                '<div class="settings-section">' +
+                '<div class="settings-section"><h2>Push notifications</h2>' +
+                '<div class="settings-row"><div class="settings-row-info"><div class="lbl">Device notifications</div>' +
+                '<div class="desc" id="pushDesc">' + pushDesc + '</div></div>' +
+                '<div class="switch ' + (pushOn ? 'on' : '') + '" id="pushSwitch"></div></div></div>' +
+                '<div class="settings-section"><h2>In app</h2>' +
                 toggleRow('Message notifications', 'Show notifications for new messages', 'notifications', prefs.notifications !== false) +
                 toggleRow('Sounds', 'Play a sound for incoming messages', 'sounds', prefs.sounds !== false) +
                 '</div>';
+            var pushSwitch = $('#pushSwitch');
+            if (pushSwitch && push) {
+                pushSwitch.addEventListener('click', function () {
+                    var state = push.status();
+                    if (state === 'granted') {
+                        push.disable().then(function () { renderSettingsSection(id); });
+                    } else if (state === 'default') {
+                        push.enable().then(function (ok) {
+                            if (ok) { renderSettingsSection(id); toast('Device notifications enabled'); }
+                            else { renderSettingsSection(id); }
+                        });
+                    }
+                    // 'denied' | 'unsupported' | 'insecure': no-op — the description explains why.
+                });
+            }
         } else if (id === 'privacy') {
             container.innerHTML = '<h1>Privacy</h1><p>Decide who can see your activity.</p>' +
                 '<div class="settings-section">' +
@@ -2260,6 +2289,7 @@
                 '</div>';
         }
         $all('.switch').forEach(function (sw) {
+            if (sw.id === 'pushSwitch') return; // has its own handler above
             sw.addEventListener('click', function () {
                 sw.classList.toggle('on');
                 var key = sw.dataset.toggle;
@@ -2484,6 +2514,11 @@
         refreshSelfChrome();
         refreshConnBanner();
         connectSockets();
+        // Silent Web Push sync — only acts when permission is already
+        // granted; never prompts on page load.
+        if (window.NexlinkPush) {
+            window.NexlinkPush.sync();
+        }
         loadConversations().then(function () {
             var initial = BOOT.initialConversationId;
             if (initial && findChat(initial)) {

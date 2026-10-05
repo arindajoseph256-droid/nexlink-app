@@ -118,6 +118,18 @@ managed processes.
 - **APK builds:** `cd mobile-app && npx eas-cli build --platform android
   --profile preview` (free expo.dev account; prints download URL).
   The installed APK must show `Nexlink 1.2.0 (build 3)` on the login footer.
+- **Release flow (two channels — details in `mobile-app/UPDATES.md`):**
+  - *JS/screens/styles/assets* → `eas update --branch <branch>` → installed APKs
+    auto-check on launch **and every foreground resume**, and a fetched bundle
+    auto-applies when the app is backgrounded or next launched
+    (`updates.checkAutomatically: ON_LOAD`). One-time activation needs
+    `npx eas login && npx eas init` (replaces the placeholder projectId).
+  - *Native changes / plugins / SDK* → bump `app.json` `version` +
+    `android.versionCode`, `package.json`, `APP_VERSION`/`APP_BUILD` in
+    `src/api/config.js`, and `latest_version` in
+    `messaging/mobile_version.py` → new APK build → installed apps are
+    prompted via `/api/mobile/version/` (set `MOBILE_VERSIONS.download_url`
+    for a one-tap "Update now").
 
 ## Docs
 

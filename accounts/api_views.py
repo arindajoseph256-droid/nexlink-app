@@ -9,7 +9,8 @@ from rest_framework.throttling import ScopedRateThrottle
 
 from .forms import RegisterForm
 from .phones import normalize_e164
-from .push_models import PushDevice
+from .push_models import PushDevice, WebPushSubscription
+from .webpush import vapid_public_key
 
 User = get_user_model()
 
@@ -311,4 +312,60 @@ def push_unregister_api(request):
     """Remove a push token (on logout or token refresh)."""
     token = (request.data.get('token') or '').strip()
     PushDevice.objects.filter(token=token, user=request.user).delete()
+    return Response({'status': 'ok'})
+
+
+@api_view(['GET'])
+@permission_classes([permissions.AllowAny])
+def push_config_api(request):
+    """Public Web Push configuration: the VAPID applicationServerKey.
+
+    Browsers need this value to create a push subscription. The key pair
+    is generated on first call and then stays stable (rotating it would
+    invalidate every existing subscription).
+    """
+    return Response({'public_key': vapid_public_key()})
+
+
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+def webpush_subscribe_api(request):
+    """Store a browser Web Push subscription for the signed-in user."""
+    subscription = request.data.get('subscription') or request.data
+    endpoint = (subscription.get('endpoint') or '').strip()
+    keys = subscription.get('keys') or {}
+    p256dh = (keys.get('p256dh') or '').strip()
+    auth = (keys.get('auth') or '').strip()
+    if not endpoint or not endpoint.startswith('https://'):
+        return Response(
+            {'detail': 'A https push endpoint URL is required.'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    if not p256dh or not auth:
+        return Response(
+            {'detail': 'Subscription keys (p256dh, auth) are required.'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    user_agent = (request.META.get('HTTP_USER_AGENT') or '')[:255]
+    WebPushSubscription.objects.update_or_create(
+        endpoint=endpoint[:1000],
+        defaults={
+            'user': request.user,
+            'p256dh': p256dh[:255],
+            'auth': auth[:255],
+            'user_agent': user_agent,
+        },
+    )
+    return Response({'status': 'ok'})
+
+
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+def webpush_unsubscribe_api(request):
+    """Remove a browser Web Push subscription (logout / permission off)."""
+    endpoint = ((request.data or {}).get('endpoint') or '').strip()
+    if endpoint:
+        WebPushSubscription.objects.filter(
+            endpoint=endpoint[:1000], user=request.user,
+        ).delete()
     return Response({'status': 'ok'})

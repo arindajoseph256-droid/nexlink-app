@@ -88,10 +88,10 @@ actually does today — nothing aspirational, nothing hidden.
 | Group profile / members list | ✅ | ✅ | ✅ DONE | |
 | Leave group | ✅ | ✅ | ✅ DONE | |
 | Add member | ✅ | ✅ | 🟡 DONE (code) | `GroupAdminScreen` (admin-only picker) → `POST /api/groups/<id>/members/` |
-| Remove / promote / demote member (admin) | ✅ | 🟠 | 🟠 PARTIAL | remove + promote implemented and admin-gated; **demote has no backend endpoint** (web exposes it too but the server only supports promote) |
+| Remove / promote / demote member (admin) | ✅ | ✅ | 🟡 DONE (code) | all three admin-gated: remove, promote, and demote (`DELETE /api/groups/<id>/admins/<user_id>/`, last-admin guarded) |
 | Edit group name/description | ✅ | ✅ | 🟡 DONE (code) | admin-only PATCH `/api/groups/<id>/` from `GroupAdminScreen` |
 
-**Remaining work:** member demote (needs a backend endpoint decision); otherwise done.
+**Remaining work: none.**
 
 ## 5. Profiles
 
@@ -148,6 +148,7 @@ actually does today — nothing aspirational, nothing hidden.
 | Push permission request | ➖ | ✅ | ✅ DONE | Android 13+ POST_NOTIFICATIONS |
 | Push token registration to user | ➖ | ✅ | ✅ DONE | `/api/auth/push/register/` |
 | Foreground/background push delivery | ➖ | 🟡 | 🟡 DONE (code) | needs device test; prod APK builds additionally need FCM credentials (`eas credentials`) |
+| **Real OS push with app/browser closed** | ✅ (Web Push) | ✅ (Expo push) | ✅ DONE | server fans out to every registered channel on new message + incoming call; web subscribes via VAPID (`/api/auth/push/config/`, `/api/auth/push/subscribe/`), Settings → Notifications toggle |
 | Quiet/typing-aware suppression | ✅ (server) | ✅ | ✅ DONE | server honors mute/prefs before sending |
 
 **Remaining work:** device test; FCM setup for store builds (account action).
@@ -193,8 +194,7 @@ actually does today — nothing aspirational, nothing hidden.
 
 **Small UI jobs (API ready):**
 1. Inline video player (tap currently opens the system player) — polish only
-2. Group member *demote* (needs a backend endpoint; promote/remove/rename done)
-3. Full screen-reader/accessibility audit (labels + touch targets already in place)
+2. Full screen-reader/accessibility audit (labels + touch targets already in place)
 
 **Done this pass (code complete, 🟡 needs device test):** filter chips, starred
 screen, contacts screen, call history, shared-media grid, group admin

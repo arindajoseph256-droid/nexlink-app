@@ -79,3 +79,25 @@ def send_push(user_ids, title, body_text, data=None):
 
     threading.Thread(target=_dispatch, daemon=True).start()
     return len(tokens)
+
+
+def notify_devices(user_ids, title, body_text, data=None):
+    """Send a notification to every device of the given users.
+
+    Fans out to both delivery channels:
+    - Expo push (Android/iOS APK) via send_push() above;
+    - Web Push (browsers/PWA: Chrome desktop + Android Chrome, Firefox,
+      Edge — OS notification even with every tab closed) via
+      accounts.webpush.send_web_push().
+
+    Callers only need this function: mute/preference filtering stays the
+    caller's responsibility, exactly as before.
+    """
+    queued = send_push(user_ids, title, body_text, data)
+    try:
+        from .webpush import send_web_push
+
+        queued += send_web_push(user_ids, title, body_text, data)
+    except Exception:  # web push must never break the Expo path
+        pass
+    return queued

@@ -37,6 +37,10 @@ export function promoteGroupAdmin(conversationId, userId) {
   return request(`/api/groups/${conversationId}/admins/${userId}/`, { method: 'POST' });
 }
 
+export function demoteGroupAdmin(conversationId, userId) {
+  return request(`/api/groups/${conversationId}/admins/${userId}/`, { method: 'DELETE' });
+}
+
 export function getChatPeople() {
   return request('/api/chats/people/');
 }

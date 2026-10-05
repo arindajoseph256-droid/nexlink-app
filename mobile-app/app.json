@@ -49,7 +49,7 @@
     "updates": {
       "url": "https://u.expo.dev/00000000-0000-0000-0000-000000000000",
       "fallbackToCacheTimeout": 0,
-      "checkAutomatically": "on-load"
+      "checkAutomatically": "ON_LOAD"
     },
     "runtimeVersion": {
       "policy": "appVersion"

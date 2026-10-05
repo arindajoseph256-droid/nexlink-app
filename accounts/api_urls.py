@@ -10,9 +10,12 @@ from .api_views import (
     logout_api,
     me_api,
     password_change_api,
+    push_config_api,
     push_register_api,
     push_unregister_api,
     register_api,
+    webpush_subscribe_api,
+    webpush_unsubscribe_api,
 )
 
 urlpatterns = [
@@ -29,4 +32,7 @@ urlpatterns = [
     path('backup/email/', backup_email_api, name='api_backup_email'),
     path('push/register/', push_register_api, name='api_push_register'),
     path('push/unregister/', push_unregister_api, name='api_push_unregister'),
+    path('push/config/', push_config_api, name='api_push_config'),
+    path('push/subscribe/', webpush_subscribe_api, name='api_webpush_subscribe'),
+    path('push/unsubscribe/', webpush_unsubscribe_api, name='api_webpush_unsubscribe'),
 ]
