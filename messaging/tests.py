@@ -871,6 +871,40 @@ class GroupAPITests(MessagingTestBase):
         )
         self.assertEqual(response.status_code, 403)
 
+    def test_admin_can_demote_member(self):
+        response = self.client.post('/api/groups/', {
+            'name': 'Ops chat', 'user_ids': [self.bob.id],
+        }, format='json')
+        group_id = response.data['id']
+        response = self.client.post(
+            f'/api/groups/{group_id}/admins/{self.bob.id}/', {}, format='json',
+        )
+        self.assertEqual(response.status_code, 200)
+
+        response = self.client.delete(f'/api/groups/{group_id}/admins/{self.bob.id}/')
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(next(
+            member for member in response.data['participants'] if member['id'] == self.bob.id
+        )['is_admin'])
+
+    def test_last_admin_cannot_be_demoted(self):
+        response = self.client.post('/api/groups/', {
+            'name': 'Solo admin', 'user_ids': [self.bob.id],
+        }, format='json')
+        group_id = response.data['id']
+        # alice is the only admin (creator) — demoting her must be rejected.
+        response = self.client.delete(f'/api/groups/{group_id}/admins/{self.alice.id}/')
+        self.assertEqual(response.status_code, 400)
+
+    def test_demote_requires_admin(self):
+        response = self.client.post('/api/groups/', {
+            'name': 'Guarded', 'user_ids': [self.bob.id],
+        }, format='json')
+        group_id = response.data['id']
+        self.client.force_login(self.bob)
+        response = self.client.delete(f'/api/groups/{group_id}/admins/{self.alice.id}/')
+        self.assertEqual(response.status_code, 403)
+
 
 class UnreadCountTests(MessagingTestBase):
     def test_unread_count_flow(self):
@@ -978,3 +1012,116 @@ class WebSocketChatTests(TransactionTestCase):
             self.assertFalse(connected)
 
         self._run(run())
+
+
+class PushFanoutTests(MessagingTestBase):
+    """Real device notifications (Expo push + Web Push) fan-out."""
+
+    def _subscribe_bob_webpush(self):
+        from accounts.push_models import WebPushSubscription
+
+        WebPushSubscription.objects.create(
+            user=self.bob,
+            endpoint='https://fcm.googleapis.com/fcm/send/bob-web',
+            p256dh='B' * 87,
+            auth='A' * 24,
+        )
+
+    @staticmethod
+    def _wait_for(mock_obj, count=1, timeout=2.0):
+        """Push dispatch runs in a daemon thread — poll briefly for it."""
+        import time
+
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            if mock_obj.call_count >= count:
+                return True
+            time.sleep(0.05)
+        return False
+
+    def test_message_fans_out_to_both_push_channels(self):
+        """notify_devices reaches the Expo AND the Web Push channel."""
+        from unittest import mock
+
+        self._subscribe_bob_webpush()
+        response = self.client.post('/api/conversations/start/', {'user_id': self.bob.id})
+        conversation_id = response.data['id']
+
+        with mock.patch('accounts.push.send_push') as mock_expo, mock.patch(
+            'accounts.webpush.send_web_push'
+        ) as mock_web:
+            self.client.post(
+                f'/api/conversations/{conversation_id}/messages/', {'body': 'hi'},
+            )
+
+        self.assertEqual(mock_expo.call_count, 1)
+        self.assertEqual(list(mock_expo.call_args.args[0]), [self.bob.id])
+        self.assertEqual(mock_web.call_count, 1)
+        self.assertEqual(list(mock_web.call_args.args[0]), [self.bob.id])
+
+    def test_message_delivers_webpush_to_subscription(self):
+        """The real sender encrypts + posts for the stored subscription."""
+        from unittest import mock
+
+        self._subscribe_bob_webpush()
+        response = self.client.post('/api/conversations/start/', {'user_id': self.bob.id})
+        conversation_id = response.data['id']
+
+        with mock.patch('accounts.webpush.webpush') as mock_send:
+            response = self.client.post(
+                f'/api/conversations/{conversation_id}/messages/',
+                {'body': 'real push!'},
+            )
+            self.assertEqual(response.status_code, 201)
+            self.assertTrue(
+                self._wait_for(mock_send),
+                'webpush() was never called — subscription ignored?',
+            )
+
+        subscription_info = mock_send.call_args.kwargs['subscription_info']
+        self.assertEqual(
+            subscription_info['endpoint'],
+            'https://fcm.googleapis.com/fcm/send/bob-web',
+        )
+        self.assertIn('p256dh', subscription_info['keys'])
+        payload = json.loads(mock_send.call_args.kwargs['data'])
+        self.assertEqual(payload['title'], self.alice.get_display_name())
+        self.assertEqual(payload['body'], 'real push!')
+        self.assertEqual(payload['data']['conversation_id'], conversation_id)
+
+    def test_message_skips_webpush_when_no_subscription(self):
+        """No stored subscription → the push service is never contacted."""
+        from unittest import mock
+
+        response = self.client.post('/api/conversations/start/', {'user_id': self.bob.id})
+        conversation_id = response.data['id']
+
+        with mock.patch('accounts.webpush.webpush') as mock_send:
+            self.client.post(
+                f'/api/conversations/{conversation_id}/messages/', {'body': 'hi'},
+            )
+            import time
+
+            time.sleep(0.5)  # allow any (wrong) background dispatch to fire
+            self.assertEqual(mock_send.call_count, 0)
+
+    def test_incoming_call_pushes_callee(self):
+        from unittest import mock
+
+        self._subscribe_bob_webpush()
+        response = self.client.post('/api/conversations/start/', {'user_id': self.bob.id})
+        conversation_id = response.data['id']
+
+        calls = []
+        with mock.patch('accounts.push.notify_devices') as mock_notify:
+            mock_notify.side_effect = lambda user_ids, **k: calls.append(
+                (list(user_ids), k.get('data', {}).get('kind')),
+            )
+            response = self.client.post(
+                f'/api/conversations/{conversation_id}/calls/', {'kind': 'voice'},
+            )
+
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(calls[0][0], [self.bob.id])
+        self.assertEqual(calls[0][1], 'call')

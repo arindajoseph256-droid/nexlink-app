@@ -11,7 +11,7 @@
  * On foreground resume: reconnect sockets + refresh (syncService).
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Linking, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, AppState, Linking, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { createNavigationContainerRef } from '@react-navigation/native';
 
@@ -66,6 +66,37 @@ export default function App() {
     }
   }, []);
 
+  /* ---------- updates: boot + every resume, auto-applied ---------- */
+  const pendingOtaRef = useRef(false);
+
+  /* OTA first (JS/assets), then the server-side binary version check.
+     A fetched OTA bundle is applied automatically when the app is next
+     backgrounded or relaunched, so installed APKs track every release
+     without manual action. */
+  const runUpdateChecks = useCallback(async () => {
+    const ota = await checkOtaUpdate();
+    if (ota?.isAvailable) {
+      pendingOtaRef.current = true;
+      setUpdateNotice({ kind: 'ota-ready' });
+    }
+    const binary = await checkBinaryUpdate();
+    if (binary && (binary.update_available || binary.update_required) && !binary.dismissed) {
+      setUpdateNotice({ kind: 'binary', ...binary });
+    }
+  }, []);
+
+  /* Apply a downloaded OTA bundle as soon as the app is backgrounded —
+     the next resume runs the new code with zero user action. */
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'background' && pendingOtaRef.current) {
+        pendingOtaRef.current = false;
+        applyOtaUpdate();
+      }
+    });
+    return () => sub.remove();
+  }, []);
+
   /* ---------- boot: restore session, verify token, check updates ---------- */
   useEffect(() => {
     let cancelled = false;
@@ -110,14 +141,7 @@ export default function App() {
       if (cancelled) return;
 
       /* updates: OTA first (JS/assets), then binary version check */
-      const ota = await checkOtaUpdate();
-      if (ota?.isAvailable) {
-        setUpdateNotice({ kind: 'ota-ready' });
-      }
-      const binary = await checkBinaryUpdate();
-      if (binary && (binary.update_available || binary.update_required) && !binary.dismissed) {
-        setUpdateNotice({ kind: 'binary', ...binary });
-      }
+      if (!cancelled) await runUpdateChecks();
 
       if (!cancelled) setBooting(false);
     })();
@@ -127,7 +151,7 @@ export default function App() {
       cancelled = true;
       stopSync();
     };
-  }, [bootNonce]);
+  }, [bootNonce, runUpdateChecks]);
 
   async function retryConnection() {
     const ok = await verifyConnectivity();
@@ -148,14 +172,15 @@ export default function App() {
     return () => {};
   }, [user, handleUserEvent]);
 
-  /* ---------- foreground sync: reconnect + refresh ---------- */
+  /* ---------- foreground sync: reconnect + refresh + update checks ---------- */
   useEffect(() => {
     if (!user) return undefined;
     const off = onForegroundSync(() => {
       ensureUserSocket(handleUserEvent).reconnectNow();
+      runUpdateChecks();
     });
     return off;
-  }, [user, handleUserEvent]);
+  }, [user, handleUserEvent, runUpdateChecks]);
 
   /* ---------- push notifications ---------- */
   useEffect(() => {
@@ -301,7 +326,8 @@ function UpdateNotice({ notice, onDismiss }) {
         <>
           <Text style={{ color: colors.text, fontWeight: '700', fontSize: 13.5 }}>Update ready</Text>
           <Text style={{ color: colors.muted, fontSize: 12, marginTop: 2 }}>
-            A Nexlink update was downloaded. Restart to apply.
+            A new Nexlink version was downloaded. It applies automatically in
+            the background, or restart now.
           </Text>
           <View style={{ flexDirection: 'row', gap: 16, marginTop: 8 }}>
             <TouchableOpacity onPress={postpone}>

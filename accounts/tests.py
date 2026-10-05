@@ -518,3 +518,112 @@ class AccountBackupApiTests(TestCase):
         response = self._post('/api/auth/backup/email/')
         self.assertEqual(response.status_code, 400)
         self.assertIn('detail', response.json())
+
+
+class PushConfigAPITests(TestCase):
+    """Public VAPID configuration endpoint for Web Push."""
+
+    def test_config_is_public_and_stable(self):
+        response = self.client.get('/api/auth/push/config/')
+        self.assertEqual(response.status_code, 200)
+        key = response.json()['public_key']
+        self.assertGreaterEqual(len(key), 80)
+        # Second call returns the SAME key (stored key pair, not regenerated).
+        again = self.client.get('/api/auth/push/config/').json()['public_key']
+        self.assertEqual(key, again)
+        from accounts.push_models import VapidKey
+        self.assertEqual(VapidKey.objects.count(), 1)
+
+
+class WebPushSubscriptionAPITests(TestCase):
+    """Browser Web Push subscription registry endpoints."""
+
+    def setUp(self):
+        self.user = User.objects.create_user(
+            phone_number='+14155550900', password='Sup3rSecure!2026',
+        )
+        from rest_framework.authtoken.models import Token
+        self.token = Token.objects.create(user=self.user)
+        self.auth = {'HTTP_AUTHORIZATION': f'Token {self.token.key}'}
+        self.subscription = {
+            'endpoint': 'https://fcm.googleapis.com/fcm/send/test-endpoint-1',
+            'keys': {'p256dh': 'B' * 87, 'auth': 'A' * 24},
+        }
+
+    def test_subscribe_requires_auth(self):
+        response = self.client.post(
+            '/api/auth/push/subscribe/', {'subscription': self.subscription},
+            content_type='application/json',
+        )
+        self.assertIn(response.status_code, (401, 403))
+
+    def test_subscribe_creates_subscription(self):
+        response = self.client.post(
+            '/api/auth/push/subscribe/', {'subscription': self.subscription},
+            content_type='application/json', **self.auth,
+        )
+        self.assertEqual(response.status_code, 200)
+        from accounts.push_models import WebPushSubscription
+        sub = WebPushSubscription.objects.get(endpoint=self.subscription['endpoint'])
+        self.assertEqual(sub.user, self.user)
+        self.assertEqual(sub.p256dh, 'B' * 87)
+
+    def test_subscribe_accepts_flat_payload(self):
+        flat = dict(self.subscription)
+        response = self.client.post(
+            '/api/auth/push/subscribe/', flat,
+            content_type='application/json', **self.auth,
+        )
+        self.assertEqual(response.status_code, 200)
+
+    def test_re_subscribe_updates_not_duplicates(self):
+        self.client.post(
+            '/api/auth/push/subscribe/', {'subscription': self.subscription},
+            content_type='application/json', **self.auth,
+        )
+        changed = {
+            'endpoint': self.subscription['endpoint'],
+            'keys': {'p256dh': 'C' * 87, 'auth': 'B' * 24},
+        }
+        self.client.post(
+            '/api/auth/push/subscribe/', {'subscription': changed},
+            content_type='application/json', **self.auth,
+        )
+        from accounts.push_models import WebPushSubscription
+        self.assertEqual(WebPushSubscription.objects.count(), 1)
+        self.assertEqual(
+            WebPushSubscription.objects.get().p256dh, 'C' * 87,
+        )
+
+    def test_subscribe_rejects_missing_keys(self):
+        bad = {'endpoint': self.subscription['endpoint'], 'keys': {}}
+        response = self.client.post(
+            '/api/auth/push/subscribe/', {'subscription': bad},
+            content_type='application/json', **self.auth,
+        )
+        self.assertEqual(response.status_code, 400)
+
+    def test_subscribe_rejects_non_https_endpoint(self):
+        bad = {'endpoint': 'http://insecure.example/push', 'keys': self.subscription['keys']}
+        response = self.client.post(
+            '/api/auth/push/subscribe/', {'subscription': bad},
+            content_type='application/json', **self.auth,
+        )
+        self.assertEqual(response.status_code, 400)
+
+    def test_unsubscribe_removes_only_own_subscription(self):
+        other = User.objects.create_user(
+            phone_number='+14155550901', password='Sup3rSecure!2026',
+        )
+        from accounts.push_models import WebPushSubscription
+        WebPushSubscription.objects.create(
+            user=other, endpoint=self.subscription['endpoint'],
+            p256dh='B' * 87, auth='A' * 24,
+        )
+        response = self.client.post(
+            '/api/auth/push/unsubscribe/', {'endpoint': self.subscription['endpoint']},
+            content_type='application/json', **self.auth,
+        )
+        self.assertEqual(response.status_code, 200)
+        # Other user's subscription is untouched (scoped to request.user).
+        self.assertTrue(WebPushSubscription.objects.filter(endpoint=self.subscription['endpoint']).exists())

@@ -13,16 +13,18 @@ through which channel is the whole release discipline.
 Configured in `app.json`:
 
 ```json
-"updates": { "url": "https://u.expo.dev/<projectId>", "fallbackToCacheTimeout": 0, "checkAutomatically": "on-load" },
+"updates": { "url": "https://u.expo.dev/<projectId>", "fallbackToCacheTimeout": 0, "checkAutomatically": "ON_LOAD" },
 "runtimeVersion": { "policy": "appVersion" }
 ```
 
 - **`runtimeVersion` = `appVersion` policy** — the runtime version equals `expo.version`
-  (currently `1.1.0`). OTA updates only apply to binaries with the *same* runtime version.
-- The app checks on launch and on foreground resume (`expo-updates`
-  `checkForUpdateAsync` → `fetchUpdateAsync`), never in a loop. When an update is
-  downloaded the user sees "Update ready — Restart to apply" (dismissible; it never
-  interrupts an active chat).
+  (currently `1.2.0`). OTA updates only apply to binaries with the *same* runtime version.
+- The app checks on launch **and on every foreground resume** (`expo-updates`
+  `checkForUpdateAsync` → `fetchUpdateAsync`, never in a loop). A downloaded
+  bundle is **applied automatically the moment the app is backgrounded** (and
+  otherwise on the next launch via `ON_LOAD`) — installed APKs track every JS
+  release with zero user action. The "Update ready" banner only offers an
+  immediate restart for users who don't want to wait.
 - Launch is never blocked waiting for an update (`fallbackToCacheTimeout: 0`).
 
 **One-time activation** (requires an expo.dev account — do this before the first OTA):

@@ -29,6 +29,8 @@ services:
           property: connectionString
       # Fill these with the real *.onrender.com origin after the first deploy
       # (or when the blueprint is applied interactively).
+      # Web Push (browser notifications) needs no extra env var: the VAPID
+      # key pair is generated automatically in the database on first use.
       - key: DJANGO_ALLOWED_HOSTS
         sync: false
       - key: CSRF_TRUSTED_ORIGINS

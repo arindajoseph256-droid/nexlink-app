@@ -240,8 +240,12 @@ class MessageListCreateView(generics.ListCreateAPIView):
         self._deliver(message)
 
     def _notify_offline(self, recipients, message):
-        """Push-notify recipients not currently connected over WebSocket."""
-        from accounts.push import send_push
+        """Push-notify recipients not currently connected over WebSocket.
+
+        Delivers through every registered channel (Expo push for the APK,
+        Web Push for browsers/PWAs) in one fan-out.
+        """
+        from accounts.push import notify_devices
 
         offline_ids = [
             p.user_id for p in recipients
@@ -264,7 +268,7 @@ class MessageListCreateView(generics.ListCreateAPIView):
         sender_name = self.request.user.get_display_name()
         excerpt = (message.body or '').strip()[:180]
         body_text = excerpt if excerpt else 'Sent you an attachment.'
-        send_push(
+        notify_devices(
             targets,
             title=sender_name,
             body_text=body_text,
@@ -959,16 +963,25 @@ def remove_group_member(request, conversation_id, user_id):
     return Response(status=status.HTTP_204_NO_CONTENT)
 
 
-@api_view(['POST'])
+@api_view(['POST', 'DELETE'])
 @permission_classes([permissions.IsAuthenticated])
 def promote_group_admin(request, conversation_id, user_id):
+    """POST: promote a member to admin. DELETE: demote them back."""
     conversation = get_object_or_404(Conversation, pk=conversation_id, kind=Conversation.Kind.GROUP)
     actor = conversation.participant_for(request.user)
     target = conversation.participants.filter(user_id=user_id).first()
     if not actor or not actor.is_admin:
-        return Response({'detail': 'Only group admins can promote members.'}, status=403)
+        return Response({'detail': 'Only group admins can manage admins.'}, status=403)
     if not target:
         return Response({'detail': 'Member not found.'}, status=404)
+    if request.method == 'DELETE':
+        if not target.is_admin:
+            return Response({'detail': 'That member is not an admin.'}, status=400)
+        if not conversation.participants.filter(is_admin=True).exclude(pk=target.pk).exists():
+            return Response({'detail': 'Promote another admin before demoting the last admin.'}, status=400)
+        target.is_admin = False
+        target.save(update_fields=['is_admin'])
+        return Response(_group_payload(conversation))
     target.is_admin = True
     target.save(update_fields=['is_admin'])
     return Response(_group_payload(conversation))
@@ -1136,6 +1149,22 @@ def call_start(request, conversation_id):
         callee=peer_member.user,
         kind=kind,
     )
+    # Ring every registered device too (APK closed, browser closed):
+    # the WebSocket _signal above only reaches clients that are online.
+    from accounts.push import notify_devices
+
+    callee_prefs = UserPreferences.for_user(peer_member.user)
+    if callee_prefs.notifications_enabled:
+        notify_devices(
+            [peer_member.user_id],
+            title=f'{request.user.get_display_name()} is calling',
+            body_text=f'Incoming {kind} call.',
+            data={
+                'kind': 'call',
+                'call_id': call.pk,
+                'conversation_id': conversation.pk,
+            },
+        )
     _signal(call, 'call.incoming', {
         'caller': request.user.get_display_name(),
         'caller_id': request.user.pk,

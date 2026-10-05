@@ -10,7 +10,7 @@
    - Push notification click focuses or opens the right conversation.
    ========================================================================== */
 
-const VERSION = 'nexlink-v1';
+const VERSION = 'nexlink-v2';
 const SHELL_CACHE = `${VERSION}-shell`;
 const STATIC_CACHE = `${VERSION}-static`;
 
@@ -130,17 +130,34 @@ self.addEventListener('push', (event) => {
     try {
         data = event.data ? event.data.json() : {};
     } catch (err) {
-        data = {};
+        data = { title: 'Nexlink', body: event.data ? event.data.text() : '' };
     }
     const title = data.title || 'Nexlink';
+    const payload = data.data || {};
+    const conversationId = payload.conversation_id;
+    const isCall = payload.kind === 'call';
+    const url = conversationId ? `/chats/?c=${conversationId}` : '/';
+    // One notification per conversation: a newer message replaces the
+    // previous one for that chat (WhatsApp-style stacking) instead of
+    // flooding the notification tray.
+    const tag = isCall ? `nexlink-call-${payload.call_id || 'x'}`
+        : (conversationId ? `nexlink-conv-${conversationId}` : 'nexlink-message');
+
     event.waitUntil(
-        self.registration.showNotification(title, {
-            body: data.body || 'You have a new message.',
-            icon: '/static/images/icon-192.png',
-            badge: '/static/images/icon-192.png',
-            tag: data.tag || 'nexlink-message',
-            data: data.data || {},
-        })
+        self.clients.matchAll({ type: 'window', includeUncontrolled: true })
+            .then((clientList) => {
+                // A focused Nexlink tab already shows the in-app banner —
+                // no OS notification needed.
+                if (clientList.some((client) => client.focused)) return undefined;
+                return self.registration.showNotification(title, {
+                    body: data.body || 'You have a new message.',
+                    icon: '/static/images/icon-192.png',
+                    badge: '/static/images/icon-192.png',
+                    tag: tag,
+                    renotify: true,
+                    data: { url: url, kind: payload.kind || 'message' },
+                });
+            })
     );
 });
 
