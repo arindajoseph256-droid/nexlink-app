@@ -1125,3 +1125,40 @@ class PushFanoutTests(MessagingTestBase):
         self.assertEqual(len(calls), 1)
         self.assertEqual(calls[0][0], [self.bob.id])
         self.assertEqual(calls[0][1], 'call')
+
+    def test_webpush_delivered_even_when_recipient_marked_online(self):
+        """Presence must not gate Web Push (stale online flags suppressed it)."""
+        from unittest import mock
+
+        self._subscribe_bob_webpush()
+        self.bob.profile.is_online = True  # stale or backgrounded client
+        self.bob.profile.save(update_fields=['is_online'])
+        response = self.client.post('/api/conversations/start/', {'user_id': self.bob.id})
+        conversation_id = response.data['id']
+
+        with mock.patch('accounts.webpush.webpush') as mock_send:
+            self.client.post(
+                f'/api/conversations/{conversation_id}/messages/', {'body': 'ping'},
+            )
+            self.assertTrue(
+                self._wait_for(mock_send),
+                'web push skipped for an "online" user — presence gate regressed',
+            )
+
+    def test_expo_push_skipped_while_recipient_online(self):
+        """The connected APK shows in-app notifications; Expo push waits."""
+        from unittest import mock
+
+        self.bob.profile.is_online = True
+        self.bob.profile.save(update_fields=['is_online'])
+        response = self.client.post('/api/conversations/start/', {'user_id': self.bob.id})
+        conversation_id = response.data['id']
+
+        with mock.patch('accounts.push.send_push') as mock_expo:
+            self.client.post(
+                f'/api/conversations/{conversation_id}/messages/', {'body': 'hi'},
+            )
+            import time
+
+            time.sleep(0.4)
+            self.assertEqual(mock_expo.call_count, 0)
