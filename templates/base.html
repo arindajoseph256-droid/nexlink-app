@@ -48,6 +48,9 @@
                 <a href="{% url 'messaging:conversations' %}" class="nav-link">Chats</a>
                 <a href="{% url 'accounts:profile' %}" class="nav-link">Profile</a>
                 <a href="{% url 'accounts:settings' %}" class="nav-link">Settings</a>
+                {% if user.is_staff %}
+                    <a href="{% url 'accounts:panel_users' %}" class="nav-link">Admin</a>
+                {% endif %}
                 <button type="button" id="theme-toggle" class="nav-link nav-link--button"
                         aria-pressed="false" title="Toggle dark mode">
                     <span class="theme-toggle__label" aria-hidden="true">Dark</span>

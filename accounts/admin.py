@@ -2,7 +2,7 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 
-from .models import Profile, User
+from .models import AdminWarning, Profile, User
 
 
 @admin.register(User)
@@ -32,3 +32,10 @@ class ProfileAdmin(admin.ModelAdmin):
     list_display = ('user', 'display_name', 'is_online', 'last_seen')
     search_fields = ('user__phone_number', 'user__username', 'display_name')
     list_filter = ('is_online',)
+
+
+@admin.register(AdminWarning)
+class AdminWarningAdmin(admin.ModelAdmin):
+    list_display = ('recipient', 'issued_by', 'reason', 'is_read', 'created_at')
+    search_fields = ('recipient__phone_number', 'recipient__username', 'reason')
+    list_filter = ('is_read',)

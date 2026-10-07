@@ -1,0 +1,141 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Admin · {{ target.get_display_name }} — Nexlink{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="{% static 'css/panel.css' %}">{% endblock %}
+
+{% block content %}
+<div class="panel-header">
+    <a class="btn btn--secondary" href="{% url 'accounts:panel_users' %}">← All users</a>
+    <h1>{{ target.get_display_name }}</h1>
+    <div class="panel-badges">
+        {% if target.is_superuser %}<span class="badge">superuser</span>{% elif target.is_staff %}<span class="badge">staff</span>{% endif %}
+        {% if not target.is_active %}<span class="badge badge--danger">banned</span>{% endif %}
+        {% if is_restricted %}<span class="badge badge--warn">restricted</span>{% endif %}
+    </div>
+</div>
+
+<div class="panel-grid">
+    <div>
+        <div class="panel-card">
+            <h2>Profile &amp; identity</h2>
+            <form method="post" action="{% url 'accounts:panel_user_update' target.id %}">
+                {% csrf_token %}
+                <div class="panel-rows">
+                    <div class="field">
+                        <label class="field__label" for="id_phone_number">Phone number (login identity)</label>
+                        <input class="field__input" id="id_phone_number" name="phone_number" type="tel" value="{{ edit_form.phone_number.value|default:'' }}">
+                        {% for error in edit_form.phone_number.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
+                    </div>
+                    <div class="field">
+                        <label class="field__label" for="id_email">Email</label>
+                        <input class="field__input" id="id_email" name="email" type="email" value="{{ edit_form.email.value|default:'' }}">
+                        {% for error in edit_form.email.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
+                    </div>
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:.65rem">
+                        <div class="field">
+                            <label class="field__label" for="id_first_name">First name</label>
+                            <input class="field__input" id="id_first_name" name="first_name" value="{{ edit_form.first_name.value|default:'' }}">
+                        </div>
+                        <div class="field">
+                            <label class="field__label" for="id_last_name">Last name</label>
+                            <input class="field__input" id="id_last_name" name="last_name" value="{{ edit_form.last_name.value|default:'' }}">
+                        </div>
+                    </div>
+                    <div class="field">
+                        <label class="field__label" for="id_display_name">Display name (in chats)</label>
+                        <input class="field__input" id="id_display_name" name="display_name" value="{{ edit_form.display_name.value|default:'' }}">
+                    </div>
+                    <div class="field">
+                        <label class="field__label" for="id_bio">About / status</label>
+                        <textarea class="field__input field__textarea" id="id_bio" name="bio">{{ edit_form.bio.value|default:'' }}</textarea>
+                    </div>
+                    <div class="field">
+                        <label class="field__label" for="id_new_password">Set new password</label>
+                        <input class="field__input" id="id_new_password" name="new_password" type="password" autocomplete="new-password">
+                        <p class="field__hint">Leave blank to keep the current password.</p>
+                        {% for error in edit_form.new_password.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
+                    </div>
+                </div>
+                <button class="btn btn--primary" type="submit" {% if not can_manage %}disabled{% endif %}>Save changes</button>
+            </form>
+        </div>
+
+        <div class="panel-card">
+            <h2>Warning history</h2>
+            {% if warnings %}
+                {% for w in warnings %}
+                    <div class="panel-warning-item">
+                        <div>{{ w.reason }}</div>
+                        <div class="panel-warning-item__meta">
+                            {{ w.created_at|date:"M j, Y H:i" }} · by {{ w.issued_by.get_display_name|default:"system" }}
+                        </div>
+                    </div>
+                {% endfor %}
+            {% else %}
+                <p style="color:var(--c-text-muted);font-size:var(--text-sm);margin:0">No warnings issued.</p>
+            {% endif %}
+        </div>
+    </div>
+
+    <div>
+        <div class="panel-card">
+            <h2>Account facts</h2>
+            <p style="margin:.2rem 0"><strong>Joined:</strong> {{ target.date_joined|date:"M j, Y H:i" }}</p>
+            <p style="margin:.2rem 0"><strong>Last login:</strong> {{ target.last_login|date:"M j, Y H:i"|default:"never" }}</p>
+            <p style="margin:.2rem 0"><strong>Conversations:</strong> {{ conversation_count }}</p>
+            <p style="margin:.2rem 0"><strong>Users they blocked:</strong> {{ blocks_issued }}</p>
+            <p style="margin:.2rem 0"><strong>Times blocked by others:</strong> {{ blocked_them_count }}</p>
+        </div>
+
+        <div class="panel-card panel-card--danger">
+            <h2>Moderation</h2>
+            {% if can_manage and not is_self %}
+                <div class="panel-actions" style="margin-bottom:.9rem">
+                    <form method="post" action="{% url 'accounts:panel_user_restrict' target.id %}">
+                        {% csrf_token %}
+                        <button class="btn btn--secondary" type="submit">
+                            {% if is_restricted %}Remove restriction{% else %}Restrict{% endif %}
+                        </button>
+                    </form>
+                    <form method="post" action="{% url 'accounts:panel_user_ban' target.id %}">
+                        {% csrf_token %}
+                        <button class="btn btn--danger" type="submit">
+                            {% if target.is_active %}Ban account{% else %}Un-ban{% endif %}
+                        </button>
+                    </form>
+                </div>
+                <form method="post" action="{% url 'accounts:panel_user_warn' target.id %}">
+                    {% csrf_token %}
+                    <div class="field">
+                        <label class="field__label" for="id_reason">Send warning</label>
+                        <textarea class="field__input field__textarea" id="id_reason" name="reason"
+                                  placeholder="Why is this user being warned?"></textarea>
+                        {% for error in warn_form.reason.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
+                    </div>
+                    <button class="btn btn--secondary" type="submit">⚠️ Send warning</button>
+                </form>
+
+                {% if target.is_superuser == False or user.is_superuser %}
+                <div style="margin-top:1.1rem;border-top:1px solid var(--c-border);padding-top:1rem">
+                    <form method="post" action="{% url 'accounts:panel_user_delete' target.id %}"
+                          onsubmit="return confirm('Permanently delete {{ target.get_display_name }}? This cannot be undone.');">
+                        {% csrf_token %}
+                        <label class="field__label" for="id_confirm">Delete account permanently</label>
+                        <p class="field__hint">Removes all their conversations and messages. Requires typing DELETE.</p>
+                        <div style="display:flex;gap:.5rem;margin-top:.4rem">
+                            <input class="field__input" id="id_confirm" name="confirm" placeholder="Type DELETE" autocomplete="off">
+                            <button class="btn btn--danger" type="submit">Delete</button>
+                        </div>
+                    </form>
+                </div>
+                {% endif %}
+            {% else %}
+                <p style="color:var(--c-text-muted);font-size:var(--text-sm);margin:0">
+                    {% if is_self %}You cannot moderate your own account.{% else %}Only superusers can manage other admins.{% endif %}
+                </p>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}
