@@ -11,6 +11,7 @@ import { ChatScreen } from '../screens/ChatScreen';
 import { ChatSettingsScreen } from '../screens/ChatSettingsScreen';
 import { ContactsScreen } from '../screens/ContactsScreen';
 import { ConversationsScreen } from '../screens/ConversationsScreen';
+import { FindPeopleScreen } from '../screens/FindPeopleScreen';
 import { GroupAdminScreen } from '../screens/GroupAdminScreen';
 import { GroupScreen } from '../screens/GroupScreen';
 import { NotificationSettingsScreen } from '../screens/NotificationSettingsScreen';
@@ -62,6 +63,7 @@ export function MainNavigator({ user, onLogout, onUserUpdated }) {
       <Stack.Screen name="StarredMessages" component={StarredMessagesScreen} />
       <Stack.Screen name="CallHistory" component={CallHistoryScreen} />
       <Stack.Screen name="Contacts" component={ContactsScreen} />
+      <Stack.Screen name="FindPeople" component={FindPeopleScreen} />
       <Stack.Screen name="ChangePassword" component={ChangePasswordScreen} />
       <Stack.Screen name="ChangeEmail">
         {(props) => <ChangeEmailScreen {...props} user={user} onUserUpdated={onUserUpdated} />}

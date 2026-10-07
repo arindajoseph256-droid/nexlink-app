@@ -1290,3 +1290,65 @@ def conversation_media(request, conversation_id):
                 'created_at': message.created_at,
             })
     return Response({'media': serializer.data, 'links': links[:100]})
+
+
+# ---------------------------------------------------------------------------
+# Contact discovery (phone / email / Google Contacts matching + suggestions)
+# ---------------------------------------------------------------------------
+
+@api_view(['GET'])
+@permission_classes([permissions.IsAuthenticated])
+@throttle_classes([ScopedRateThrottle])
+@throttle_scope('search')
+def contacts_suggestions(request):
+    """People You May Know, ranked by real Nexlink relationship signals."""
+    from .discovery import suggestions_for
+
+    try:
+        limit = min(int(request.query_params.get('limit') or 20), 50)
+    except (TypeError, ValueError):
+        limit = 20
+    results = suggestions_for(request.user, request=request, limit=limit)
+    return Response({'results': results})
+
+
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+@throttle_classes([ScopedRateThrottle])
+@throttle_scope('contact_match')
+def contacts_match(request):
+    """Match uploaded contact identifiers against registered Nexlink users.
+
+    Accepts ``{phones: [...], emails: [...], source: 'phone_contacts'|'google_contacts'}``.
+    Identifiers are used for matching only — never stored, never echoed back.
+    Responses contain safe public fields only (no phone numbers, no emails).
+    """
+    from .discovery import VALID_SOURCES, collect_identifiers, match_users
+
+    payload = request.data
+    if not isinstance(payload, dict):
+        return Response({'detail': 'Invalid payload.'}, status=status.HTTP_400_BAD_REQUEST)
+    body = request.body if hasattr(request, 'body') else b''
+    if len(body) > 64 * 1024:
+        return Response({'detail': 'Payload too large.'}, status=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE)
+
+    source = payload.get('source') or 'phone_contacts'
+    if source not in VALID_SOURCES:
+        return Response({'detail': 'Unknown discovery source.'}, status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        identifiers = collect_identifiers(payload)
+    except ValueError as exc:
+        return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+
+    results = match_users(
+        request.user,
+        phones=identifiers['phones'],
+        emails=identifiers['emails'],
+        source=source,
+        request=request,
+    )
+    return Response({
+        'results': results,
+        'rejected': identifiers.get('rejected', 0),
+    })

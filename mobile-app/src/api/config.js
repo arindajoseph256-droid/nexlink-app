@@ -45,8 +45,8 @@ export const WS_BASE_URL = API_BASE_URL.replace(/^http/, 'ws');
  * /api/mobile/version/. Keep in sync with expo.version / expo.android.versionCode
  * in app.json — the footers are how you can *prove* a fresh APK is installed.
  */
-export const APP_VERSION = '1.2.0';
-export const APP_BUILD = 3;
+export const APP_VERSION = '1.3.0';
+export const APP_BUILD = 4;
 export const APP_VERSION_LABEL = `Nexlink ${APP_VERSION} (build ${APP_BUILD})`;
 
 export const configDiagnostics = {

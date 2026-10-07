@@ -73,6 +73,7 @@ actually does today — nothing aspirational, nothing hidden.
 | Realtime list refresh | ✅ | ✅ | ✅ DONE | event bus + focus re-validation |
 | Filter chips (All/Unread/Pinned/Groups/Archived) | ✅ | ✅ | 🟡 DONE (code) | chip row over the list, same archived/pinned/unread/groups semantics as `nexus.js` |
 | Contacts screen | ✅ | ✅ | 🟡 DONE (code) | `ContactsScreen` — list, tap → chat, remove; 👥 header entry + Settings row |
+| Find People (contact discovery + PYMK) | ✅ | ✅ | 🟡 DONE (code) | `FindPeopleScreen` — device-contacts matching (expo-contacts, READ_CONTACTS rationale in app.json), People You May Know, permission-denied state + retry, invite via share sheet; web: New Chat → “Find people to chat with”. Server: `/api/contacts/match/` + `/api/contacts/suggestions/`; identifiers never stored; privacy toggles in Settings → Privacy |
 | Shared-media grid per chat | ✅ | ✅ | 🟡 DONE (code) | `SharedMediaScreen` (Media/Links/Docs tabs) from the chat ⋮ menu |
 | Report user | ✅ | ✅ | 🟡 DONE (code) | same five reasons as web, hooked into the chat ⋮ menu; server also blocks |
 | Group vs DM routing | ✅ | ✅ | ✅ DONE | |

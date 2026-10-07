@@ -20,6 +20,7 @@ export * from './auth';
 export * from './conversations';
 export * from './messages';
 export * from './users';
+export * from './discovery';
 export * from './groups';
 export * from './settings';
 export * from './notifications';

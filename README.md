@@ -151,6 +151,9 @@ IP; `10.0.2.2` for the Android emulator).
 | DELETE | `/api/messages/<id>/delete/` | soft-delete own message |
 | POST   | `/api/messages/<id>/react/` | toggle emoji reaction `{emoji}` |
 | GET    | `/api/users/search/?q=` | find users to chat with |
+| POST   | `/api/contacts/match/` | match phone/email contact identifiers against registered users (never stored; safe fields only) |
+| GET    | `/api/contacts/suggestions/` | People You May Know, ranked by mutual contacts / shared groups |
+| GET/PATCH | `/api/auth/preferences/` | includes contact-discovery privacy toggles (`discoverable_by_phone/email/in_suggestions`) |
 | PATCH  | `/api/conversations/<id>/state/` | pin/mute/archive/hide a chat (per user) |
 | POST   | `/api/conversations/<id>/clear/` | hide all messages for self only |
 | POST   | `/api/messages/<id>/star/` | toggle a star on a message |

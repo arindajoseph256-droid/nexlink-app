@@ -209,6 +209,8 @@ REST_FRAMEWORK = {
         'messages': '120/minute',
         'search': '60/minute',
         'auth': '20/minute',
+        # Contact matching is an enumeration risk: keep it tight.
+        'contact_match': '20/minute',
     },
 }
 
