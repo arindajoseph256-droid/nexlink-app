@@ -40,7 +40,6 @@ export function FindPeopleScreen() {
 
   const [suggestions, setSuggestions] = useState([]);
   const [matches, setMatches] = useState([]);
-  const [unmatched, setUnmatched] = useState([]);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [error, setError] = useState('');
@@ -79,12 +78,6 @@ export function FindPeopleScreen() {
       } else {
         setMatches(data.results || []);
         setLastSynced(new Date());
-        if (!(data.results || []).length) {
-          const registeredIds = new Set((data.results || []).map((r) => String(r.id)));
-          // discoverContacts currently returns only matches; unmatched list is
-          // derived client-side by the caller when provided by the server later.
-          setUnmatched([]);
-        }
       }
     } catch (err) {
       setError(friendlyError(err));
@@ -217,25 +210,24 @@ export function FindPeopleScreen() {
           )
         }
         renderItem={({ item }) => renderPerson(item, false)}
-        ListFooterComponent={
-          unmatched.length > 0 ? (
-            <View>
-              <Text style={[styles.sectionTitle, { color: colors.muted }]}>NOT ON NEXLINK</Text>
-              {unmatched.map((name) => (
-                <View style={styles.row} key={name}>
-                  <Avatar name={name} size={42} />
-                  <View style={styles.rowText}>
-                    <Text style={[styles.name, { color: colors.text }]} numberOfLines={1}>{name}</Text>
-                    <Text style={[styles.sub, { color: colors.muted }]}>Not on Nexlink</Text>
-                  </View>
-                  <TouchableOpacity style={[styles.chatBtn, { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border }]} onPress={() => inviteContact(name)}>
-                    <Text style={{ color: colors.text, fontWeight: '700' }}>Invite</Text>
-                  </TouchableOpacity>
-                </View>
-              ))}
+        ListFooterComponent={(
+          <View>
+            <Text style={[styles.sectionTitle, { color: colors.muted }]}>INVITE FRIENDS</Text>
+            <View style={styles.row}>
+              <Avatar name="Invite" size={42} />
+              <View style={styles.rowText}>
+                <Text style={[styles.name, { color: colors.text }]} numberOfLines={1}>Invite a friend to Nexlink</Text>
+                <Text style={[styles.sub, { color: colors.muted }]}>Share a link — never auto-sent</Text>
+              </View>
+              <TouchableOpacity
+                style={[styles.chatBtn, { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border }]}
+                onPress={inviteContact}
+              >
+                <Text style={{ color: colors.text, fontWeight: '700' }}>Invite</Text>
+              </TouchableOpacity>
             </View>
-          ) : null
-        }
+          </View>
+        )}
       />
     </SafeAreaView>
   );
