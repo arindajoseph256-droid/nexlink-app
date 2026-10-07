@@ -1942,6 +1942,7 @@
                 '<div style="display:flex;gap:8px;margin-bottom:8px">' +
                 '<button class="btn btn-primary" style="flex:1" id="btnNewGroup">New group</button>' +
                 '<button class="btn btn-outline" style="flex:1" id="btnSearchPeople">Find someone</button></div>' +
+                '<button class="btn btn-primary" style="width:100%;margin-bottom:8px" id="btnFindPeople">Find people to chat with</button>' +
                 '<button class="btn btn-outline" style="width:100%;margin-bottom:16px" id="btnPhoneChat">Chat with a phone number</button>' +
                 '<div id="peopleList">' + (people.length ? people.map(function (p) {
                     return '<div class="search-result" data-uid="' + p.id + '">' + avatarHtml(p, 'sm') +
@@ -1955,6 +1956,7 @@
             $('#btnNewGroup').addEventListener('click', function () { close(); openCreateGroupModal(); });
             $('#btnSearchPeople').addEventListener('click', function () { close(); openGlobalSearch(); });
             $('#btnPhoneChat').addEventListener('click', function () { close(); openPhoneChat(); });
+            $('#btnFindPeople').addEventListener('click', function () { close(); openFindPeopleView(); });
             $all('#peopleList .search-result').forEach(function (el) {
                 el.addEventListener('click', function () { startChatWith(Number(el.dataset.uid)); close(); });
             });
@@ -2015,6 +2017,84 @@
             });
             setTimeout(function () { $('#groupName').focus(); }, 100);
         }).catch(function () { toast('Could not load people'); });
+    }
+
+    /* ---------- find people (contact discovery: WhatsApp/Instagram-style) ---------- */
+    function discoverySourceLabel(p) {
+        var sources = p.sources || [];
+        if (sources.indexOf('phone') >= 0) return 'From your contacts';
+        if (sources.indexOf('email') >= 0) return 'From your contacts (email)';
+        if (p.is_contact || p.source === 'phone_contacts' || p.source === 'google_contacts') return 'From your contacts';
+        if (p.mutual_contacts > 0) return p.mutual_contacts + ' mutual contact' + (p.mutual_contacts === 1 ? '' : 's');
+        if (p.shared_groups > 0) return p.shared_groups === 1 ? 'Shared group' : 'Member of ' + p.shared_groups + ' groups with you';
+        if (p.source === 'nexlink') return 'You may know each other';
+        return 'On NEXLINK';
+    }
+    function discoveryRowHtml(p) {
+        return '<div class="member-row" data-uid="' + p.id + '">' + avatarHtml(p, '', { presence: true }) +
+            '<div class="meta"><div class="name">' + esc(p.display_name) + '</div>' +
+            '<div class="sub">' + esc(discoverySourceLabel(p)) + '</div></div>' +
+            '<div class="member-actions"><button class="btn btn-primary btn-sm" data-discover-chat="' + p.id + '">Chat</button></div></div>';
+    }
+    function openFindPeopleView() {
+        var root = $('#modalRoot');
+        root.innerHTML = '<div class="modal-back" id="findPeopleBack" style="align-items:flex-start;padding-top:6vh">' +
+            '<div class="modal" style="width:min(560px,100%);max-height:86vh">' +
+            '<div class="modal-head"><h3>Find People</h3><button class="icon-btn" id="findPeopleClose">' + ICONS.x + '</button></div>' +
+            '<div class="modal-body" style="padding-top:8px">' +
+            '<div id="findPeopleState" style="text-align:center;color:var(--text-3);font-size:13px;padding:12px">Loading suggestions…</div>' +
+            '<div id="findPeopleContactsSection" style="display:none">' +
+            '<div class="result-group-title" style="margin-top:10px">Contacts on NEXLINK</div>' +
+            '<div id="findPeopleContactsList"></div>' +
+            '<div style="display:flex;gap:8px;margin:10px 0 4px">' +
+            '<button class="btn btn-outline" style="flex:1" id="btnFindPhoneContacts">📱 Find from my saved contacts</button>' +
+            '</div>' +
+            '<div id="phoneMatchHint" style="display:none;color:var(--text-3);font-size:12.5px;margin:4px 0 10px">The Android app matches your phone’s address book; on web, save people as contacts below and we’ll match their numbers.</div>' +
+            '</div>' +
+            '<div id="findPeopleSuggestionsSection" style="display:none">' +
+            '<div class="result-group-title" style="margin-top:14px">People You May Know</div>' +
+            '<div id="findPeopleSuggestionsList"></div>' +
+            '</div>' +
+            '<div id="findPeopleSync" style="display:none;color:var(--text-3);font-size:12px;margin-top:6px"></div>' +
+            '</div></div></div>';
+        var close = function () { root.innerHTML = ''; };
+        $('#findPeopleClose').addEventListener('click', close);
+        $('#findPeopleBack').addEventListener('click', function (e) { if (e.target.id === 'findPeopleBack') close(); });
+        bindDiscoveryChats(close);
+
+        function bindDiscoveryChats(onClose) {
+            $all('[data-discover-chat]').forEach(function (b) {
+                b.addEventListener('click', function () { startChatWith(Number(b.dataset.discoverChat)); onClose(); });
+            });
+        }
+
+        Promise.all([
+            API.get('/api/chats/people/'),
+            API.get('/api/contacts/suggestions/'),
+        ]).then(function (results) {
+            var people = ((results[0] && results[0].results) || []);
+            var suggestions = ((results[1] && results[1].results) || []);
+            var state = $('#findPeopleState');
+            if (state) state.remove();
+            var contactsSection = $('#findPeopleContactsSection');
+            var suggestionsSection = $('#findPeopleSuggestionsSection');
+            if (!contactsSection || !suggestionsSection) return;
+            if (people.length) {
+                contactsSection.style.display = 'block';
+                $('#findPeopleContactsList').innerHTML = people.slice(0, 12).map(discoveryRowHtml).join('');
+            }
+            if (suggestions.length) {
+                suggestionsSection.style.display = 'block';
+                $('#findPeopleSuggestionsList').innerHTML = suggestions.map(discoveryRowHtml).join('');
+            }
+            bindDiscoveryChats(function () { close(); });
+            $('#btnFindPhoneContacts').addEventListener('click', function () {
+                $('#phoneMatchHint').style.display = 'block';
+            });
+        }).catch(function () {
+            var state = $('#findPeopleState');
+            if (state) state.textContent = 'Could not load suggestions. Check your connection and try again.';
+        });
     }
 
     /* ---------- contacts & groups views ---------- */
@@ -2281,6 +2361,11 @@
                 toggleRow('Read receipts', 'Let others know when you\'ve read their messages', 'read_receipts', prefs.read_receipts !== false) +
                 toggleRow('Typing indicator', 'Show when you\'re typing', 'typing_indicator', prefs.typing_indicator !== false) +
                 toggleRow('Last seen', 'Show when you were last online', 'last_seen_visible', prefs.last_seen_visible !== false) +
+                '</div>' +
+                '<div class="settings-section"><h2>Contact discovery</h2><p style="color:var(--text-3);font-size:12.5px;margin:-2px 0 8px">Control how other people can find you on NEXLINK.</p>' +
+                toggleRow('Find me by my phone number', 'People who have your number in their contacts can see you', 'discoverable_by_phone', prefs.discoverable_by_phone !== false) +
+                toggleRow('Find me by my email', 'People who have your email can see you', 'discoverable_by_email', prefs.discoverable_by_email !== false) +
+                toggleRow('Show me in People You May Know', 'Suggest you to people you share contacts or groups with', 'discoverable_in_suggestions', prefs.discoverable_in_suggestions !== false) +
                 '</div>';
         } else if (id === 'chats') {
             container.innerHTML = '<h1>Chats</h1><p>Set your default chat behaviour.</p>' +

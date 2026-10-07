@@ -71,7 +71,27 @@ export function ContactsScreen() {
           <Text style={[styles.backText, { color: colors.text }]}>←</Text>
         </TouchableOpacity>
         <Text style={[styles.headerTitle, { color: colors.text }]}>Contacts</Text>
+        <TouchableOpacity
+          style={{ marginLeft: 'auto' }}
+          onPress={() => navigation.navigate('FindPeople')}
+        >
+          <Text style={{ color: colors.text, fontWeight: '800', fontSize: 14 }}>+ Find People</Text>
+        </TouchableOpacity>
       </View>
+
+      <TouchableOpacity
+        style={styles.discoverCard}
+        onPress={() => navigation.navigate('FindPeople')}
+      >
+        <Text style={{ fontSize: 26 }}>📱</Text>
+        <View style={{ flex: 1 }}>
+          <Text style={[styles.discoverTitle, { color: colors.text }]}>Find people from your contacts</Text>
+          <Text style={[styles.discoverSub, { color: colors.muted }]}>
+            See which of your phone contacts are on Nexlink
+          </Text>
+        </View>
+        <Text style={{ color: colors.muted, fontSize: 18 }}>›</Text>
+      </TouchableOpacity>
 
       {error ? <Text style={[styles.error, { color: colors.danger }]}>{error}</Text> : null}
 
@@ -116,6 +136,13 @@ function makeStyles(colors) {
     header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 10, gap: 12 },
     backText: { fontSize: 22 },
     headerTitle: { fontSize: 20, fontWeight: '800' },
+    discoverCard: {
+      flexDirection: 'row', alignItems: 'center', gap: 12,
+      marginHorizontal: 12, marginTop: 4, marginBottom: 8, padding: 14,
+      borderRadius: 14, backgroundColor: colors.surface,
+    },
+    discoverTitle: { fontSize: 14.5, fontWeight: '700' },
+    discoverSub: { fontSize: 12, marginTop: 2 },
     list: { paddingVertical: 8, paddingBottom: 28 },
     row: {
       flexDirection: 'row',

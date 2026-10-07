@@ -2,7 +2,7 @@
   "expo": {
     "name": "Nexlink",
     "slug": "nexlink-mobile",
-    "version": "1.2.0",
+    "version": "1.3.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
@@ -24,7 +24,7 @@
     },
     "android": {
       "package": "com.nexlink.mobile",
-      "versionCode": 3,
+      "versionCode": 4,
       "splash": {
         "image": "./assets/splash-icon.png",
         "resizeMode": "contain",
@@ -40,7 +40,8 @@
         "INTERNET",
         "POST_NOTIFICATIONS",
         "CAMERA",
-        "RECORD_AUDIO"
+        "RECORD_AUDIO",
+        "READ_CONTACTS"
       ]
     },
     "web": {
@@ -60,7 +61,14 @@
       }
     },
     "plugins": [
-      "expo-sharing"
+      "expo-sharing",
+      [
+        "expo-contacts",
+        {
+          "contactsPermission": "Allow Nexlink to find people you know from your contacts. Your contact list is never stored or shared.",
+          "contactsPermissionIOSKey": "NSContactsUsageDescription"
+        }
+      ]
     ]
   }
 }

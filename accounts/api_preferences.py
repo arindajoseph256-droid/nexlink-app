@@ -11,6 +11,7 @@ STATUS_FLOW = {'available', 'busy', 'away', 'dnd', 'invisible'}
 
 
 def _preferences_payload(prefs):
+    profile = prefs.user.profile
     return {
         'theme': prefs.theme,
         'accent': prefs.accent,
@@ -21,6 +22,9 @@ def _preferences_payload(prefs):
         'read_receipts': prefs.read_receipts,
         'typing_indicator': prefs.typing_indicator,
         'last_seen_visible': prefs.last_seen_visible,
+        'discoverable_by_phone': profile.discoverable_by_phone,
+        'discoverable_by_email': profile.discoverable_by_email,
+        'discoverable_in_suggestions': profile.discoverable_in_suggestions,
     }
 
 
@@ -57,6 +61,17 @@ def preferences_api(request):
         if key in data:
             setattr(prefs, field, bool(data[key]))
     prefs.save()
+
+    profile = prefs.user.profile
+    profile_changed = False
+    for key in ('discoverable_by_phone', 'discoverable_by_email', 'discoverable_in_suggestions'):
+        if key in data:
+            setattr(profile, key, bool(data[key]))
+            profile_changed = True
+    if profile_changed:
+        profile.save(update_fields=[
+            'discoverable_by_phone', 'discoverable_by_email', 'discoverable_in_suggestions',
+        ])
     return Response(_preferences_payload(prefs))
 
 

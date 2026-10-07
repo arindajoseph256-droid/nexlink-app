@@ -112,6 +112,14 @@ class Profile(models.Model):
     online_visibility = models.CharField(
         max_length=10, choices=Visibility.choices, default=Visibility.EVERYONE,
     )
+    # Contact-discovery controls (Settings → Privacy → Contact discovery).
+    # 'discoverable_by_phone' lets people who have this user's phone number
+    # in their address book find them via contact matching; '…_by_email'
+    # does the same for email matching. 'discoverable_in_suggestions' keeps
+    # the user out of other people's People-You-May-Know lists entirely.
+    discoverable_by_phone = models.BooleanField(default=True)
+    discoverable_by_email = models.BooleanField(default=True)
+    discoverable_in_suggestions = models.BooleanField(default=True)
 
     class Meta:
         indexes = [

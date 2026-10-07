@@ -18,7 +18,7 @@ from rest_framework.response import Response
 def _default_config():
     fallback = getattr(settings, 'MOBILE_VERSIONS', None) or {}
     return {
-        'latest_version': fallback.get('latest_version', '1.2.0'),
+        'latest_version': fallback.get('latest_version', '1.3.0'),
         'minimum_supported_version': fallback.get('minimum_supported_version', '1.0.0'),
         'update_required': fallback.get('update_required', False),
         'download_url': fallback.get('download_url', ''),
