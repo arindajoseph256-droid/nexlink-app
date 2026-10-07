@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Admin · Users — Nexlink{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="{% static 'css/panel.css' %}">{% endblock %}
+
+{% block content %}
+<div class="panel-header">
+    <h1>Users</h1>
+    <div style="margin-left:auto;display:flex;gap:.5rem">
+        <a class="btn btn--primary" href="{% url 'accounts:panel_user_create' %}">+ Add user</a>
+    </div>
+</div>
+
+<div class="panel-stats">
+    <div class="panel-stat"><div class="panel-stat__num">{{ stats.total }}</div><div class="panel-stat__label">Total users</div></div>
+    <div class="panel-stat"><div class="panel-stat__num">{{ stats.active }}</div><div class="panel-stat__label">Active</div></div>
+    <div class="panel-stat"><div class="panel-stat__num">{{ stats.online }}</div><div class="panel-stat__label">Online now</div></div>
+    <div class="panel-stat"><div class="panel-stat__num">{{ stats.banned }}</div><div class="panel-stat__label">Banned</div></div>
+    <div class="panel-stat"><div class="panel-stat__num">{{ stats.staff }}</div><div class="panel-stat__label">Staff</div></div>
+</div>
+
+<div class="panel-toolbar">
+    <form method="get" action="{% url 'accounts:panel_users' %}">
+        <div class="field">
+            <input class="field__input" type="search" name="q" value="{{ query }}"
+                   placeholder="Search name, phone, email or username…" aria-label="Search users">
+        </div>
+        {% if active_filter != 'all' %}<input type="hidden" name="filter" value="{{ active_filter }}">{% endif %}
+        <button class="btn btn--secondary" type="submit">Search</button>
+        {% if query %}<a class="btn btn--secondary" href="{% url 'accounts:panel_users' %}{% if active_filter != 'all' %}?filter={{ active_filter }}{% endif %}">Clear</a>{% endif %}
+    </form>
+</div>
+
+<nav class="panel-tabs" aria-label="User filters">
+    {% for key, label in filters %}
+        <a class="panel-tab {% if active_filter == key %}panel-tab--active{% endif %}"
+           href="{% url 'accounts:panel_users' %}?filter={{ key }}{% if query %}&q={{ query|urlencode }}{% endif %}">{{ label }}</a>
+    {% endfor %}
+</nav>
+
+<div style="overflow-x:auto">
+<table class="panel-table">
+    <thead>
+        <tr>
+            <th>User</th>
+            <th>Phone</th>
+            <th>Email</th>
+            <th>Status</th>
+            <th>Joined</th>
+            <th></th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for u in page_obj %}
+        <tr>
+            <td>
+                <a class="panel-table__user" href="{% url 'accounts:panel_user_detail' u.id %}">
+                    <span class="badge {% if u.profile.is_online %}badge--online{% else %}badge--offline{% endif %}"></span>
+                    {{ u.get_display_name }}
+                    <span style="color:var(--c-text-muted);font-weight:400">@{{ u.username }}</span>
+                </a>
+            </td>
+            <td>{{ u.phone_number }}</td>
+            <td>{{ u.email|default:"—" }}</td>
+            <td>
+                <div class="panel-badges">
+                    {% if u.is_superuser %}<span class="badge">superuser</span>{% elif u.is_staff %}<span class="badge">staff</span>{% endif %}
+                    {% if not u.is_active %}<span class="badge badge--danger">banned</span>{% endif %}
+                    {% if u.profile.is_restricted %}<span class="badge badge--warn">restricted</span>{% endif %}
+                    {% if u.blocked_by_count %}<span class="badge badge--muted">blocked ×{{ u.blocked_by_count }}</span>{% endif %}
+                    {% if u.warning_count %}<span class="badge badge--warn">warned ×{{ u.warning_count }}</span>{% endif %}
+                </div>
+            </td>
+            <td>{{ u.date_joined|date:"M j, Y" }}</td>
+            <td><a class="btn btn--secondary" href="{% url 'accounts:panel_user_detail' u.id %}">Manage</a></td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="6" style="text-align:center;color:var(--c-text-muted);padding:1.5rem">
+            No users match this view.
+        </td></tr>
+        {% endfor %}
+    </tbody>
+</table>
+</div>
+
+{% if page_obj.paginator.num_pages > 1 %}
+<div class="panel-pagination">
+    {% if page_obj.has_previous %}
+        <a class="btn btn--secondary" href="?page={{ page_obj.previous_page_number }}{% if query %}&q={{ query|urlencode }}{% endif %}{% if active_filter != 'all' %}&filter={{ active_filter }}{% endif %}">← Newer</a>
+    {% endif %}
+    <span style="color:var(--c-text-muted);font-size:var(--text-sm)">
+        Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}
+    </span>
+    {% if page_obj.has_next %}
+        <a class="btn btn--secondary" href="?page={{ page_obj.next_page_number }}{% if query %}&q={{ query|urlencode }}{% endif %}{% if active_filter != 'all' %}&filter={{ active_filter }}{% endif %}">Older →</a>
+    {% endif %}
+</div>
+{% endif %}
+{% endblock %}

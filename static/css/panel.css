@@ -1,0 +1,216 @@
+/* Admin panel (/panel/) — builds on base.css variables and components. */
+
+.panel-header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 1.25rem;
+}
+
+.panel-header h1 {
+    margin: 0;
+    font-size: 1.5rem;
+}
+
+.panel-stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+    gap: 0.75rem;
+    margin-bottom: 1.25rem;
+}
+
+.panel-stat {
+    background: var(--c-surface);
+    border: 1px solid var(--c-border);
+    border-radius: var(--radius-md);
+    padding: 0.85rem 1rem;
+}
+
+.panel-stat__num {
+    font-size: 1.35rem;
+    font-weight: 700;
+}
+
+.panel-stat__label {
+    color: var(--c-text-muted);
+    font-size: var(--text-xs);
+}
+
+.panel-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.6rem;
+    margin-bottom: 1rem;
+}
+
+.panel-toolbar form {
+    display: flex;
+    gap: 0.5rem;
+    flex: 1;
+    min-width: 220px;
+}
+
+.panel-toolbar .field {
+    margin-bottom: 0;
+    flex: 1;
+}
+
+.panel-tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    margin-bottom: 1rem;
+}
+
+.panel-tab {
+    padding: 0.4rem 0.9rem;
+    border-radius: 999px;
+    border: 1px solid var(--c-border);
+    background: var(--c-surface);
+    color: var(--c-text);
+    font-size: var(--text-sm);
+    text-decoration: none;
+}
+
+.panel-tab:hover {
+    text-decoration: none;
+    background: var(--c-surface-2);
+}
+
+.panel-tab--active {
+    background: var(--c-primary);
+    border-color: var(--c-primary);
+    color: #fff;
+}
+
+.panel-table {
+    width: 100%;
+    border-collapse: collapse;
+    background: var(--c-surface);
+    border: 1px solid var(--c-border);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+    font-size: var(--text-sm);
+}
+
+.panel-table th,
+.panel-table td {
+    text-align: left;
+    padding: 0.65rem 0.75rem;
+    border-bottom: 1px solid var(--c-border);
+    vertical-align: middle;
+}
+
+.panel-table th {
+    color: var(--c-text-muted);
+    font-size: var(--text-xs);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.panel-table tr:last-child td {
+    border-bottom: none;
+}
+
+.panel-table__user {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    text-decoration: none;
+    color: var(--c-text);
+    font-weight: 600;
+}
+
+.panel-table__user:hover {
+    text-decoration: underline;
+}
+
+.panel-badges {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.3rem;
+}
+
+.badge--muted {
+    background: var(--c-surface-2);
+    color: var(--c-text-muted);
+}
+
+.badge--danger {
+    background: var(--c-danger);
+    color: #fff;
+}
+
+.badge--warn {
+    background: var(--c-warning, #b45309);
+    color: #fff;
+}
+
+.panel-pagination {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 0.75rem;
+    margin: 1rem 0 0;
+}
+
+.panel-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+    gap: 1.25rem;
+    align-items: start;
+}
+
+@media (max-width: 860px) {
+    .panel-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+.panel-card {
+    background: var(--c-surface);
+    border: 1px solid var(--c-border);
+    border-radius: var(--radius-md);
+    padding: 1.1rem 1.2rem;
+    margin-bottom: 1.1rem;
+}
+
+.panel-card h2 {
+    margin: 0 0 0.75rem;
+    font-size: 1.05rem;
+}
+
+.panel-card--danger {
+    border-color: var(--c-danger);
+}
+
+.panel-warning-item {
+    border-top: 1px solid var(--c-border);
+    padding: 0.6rem 0;
+    font-size: var(--text-sm);
+}
+
+.panel-warning-item:first-of-type {
+    border-top: none;
+}
+
+.panel-warning-item__meta {
+    color: var(--c-text-muted);
+    font-size: var(--text-xs);
+}
+
+.panel-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.panel-rows {
+    display: grid;
+    gap: 0.65rem;
+}
+
+.panel-rows .field {
+    margin-bottom: 0;
+}

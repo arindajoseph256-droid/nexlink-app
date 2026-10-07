@@ -115,6 +115,9 @@ class ConversationCreateView(generics.CreateAPIView):
         ).exists():
             return Response({'detail': 'This user is unavailable.'}, status=status.HTTP_403_FORBIDDEN)
 
+        if getattr(target.profile, 'is_restricted', False):
+            return Response({'detail': 'This user is unavailable.'}, status=status.HTTP_403_FORBIDDEN)
+
         conversation, created = Conversation.get_or_create_between(request.user, target)
         if created:
             # Unhide on both sides for a fresh conversation.
@@ -433,7 +436,8 @@ def search_users(request):
     excluded_ids = {request.user.pk}
     for blocker_id, blocked_id in blocked_pairs:
         excluded_ids.update((blocker_id, blocked_id))
-    matched_users = matched_users.exclude(pk__in=excluded_ids)[:20]
+    matched_users = matched_users.exclude(pk__in=excluded_ids)
+    matched_users = matched_users.exclude(profile__is_restricted=True)[:20]
     serializer = UserSearchSerializer(matched_users, many=True)
     return Response({'results': serializer.data})
 
@@ -614,6 +618,11 @@ def chat_by_phone(request):
         Q(blocker=request.user, blocked=target)
         | Q(blocker=target, blocked=request.user),
     ).exists():
+        return Response(
+            {'detail': 'This user is unavailable.'},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+    if getattr(target.profile, 'is_restricted', False):
         return Response(
             {'detail': 'This user is unavailable.'},
             status=status.HTTP_403_FORBIDDEN,

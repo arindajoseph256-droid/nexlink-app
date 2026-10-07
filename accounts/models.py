@@ -120,6 +120,10 @@ class Profile(models.Model):
     discoverable_by_phone = models.BooleanField(default=True)
     discoverable_by_email = models.BooleanField(default=True)
     discoverable_in_suggestions = models.BooleanField(default=True)
+    # Moderation restriction (admin panel): a restricted user is hidden from
+    # search, contact discovery and suggestions, and nobody can start a new
+    # conversation with them. Existing chats keep working; fully reversible.
+    is_restricted = models.BooleanField(default=False)
 
     class Meta:
         indexes = [
@@ -147,6 +151,37 @@ def create_profile_for_new_user(sender, instance, created, **kwargs):
     """Every user gets a Profile automatically (idempotent)."""
     if created:
         Profile.objects.get_or_create(user=instance)
+
+
+class AdminWarning(models.Model):
+    """A moderation warning issued to a user from the admin panel.
+
+    Also delivered to the recipient as a SYSTEM Notification so the user
+    actually sees it in-app; the row itself is the durable record.
+    """
+
+    recipient = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='admin_warnings',
+    )
+    issued_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name='warnings_issued',
+    )
+    reason = models.CharField(max_length=500)
+    is_read = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        indexes = [models.Index(fields=['recipient', '-created_at'])]
+
+    def __str__(self):
+        return f'Warning for {self.recipient}: {self.reason[:40]}'
 
 
 class UserPreferences(models.Model):

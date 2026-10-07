@@ -148,7 +148,11 @@ def blocked_ids_for(user):
 
 def _suggestion_allowed(user_id, profile_map):
     profile = profile_map.get(user_id)
-    return bool(profile is None or profile.discoverable_in_suggestions)
+    if profile is None:
+        return True
+    if getattr(profile, 'is_restricted', False):
+        return False
+    return bool(profile.discoverable_in_suggestions)
 
 
 def _profile_map(user_ids):
@@ -206,7 +210,9 @@ def _match_query(phones, emails):
         condition |= Q(email__in=emails)
     if condition == Q():
         return User.objects.none()
-    return User.objects.filter(condition).filter(is_active=True)
+    return User.objects.filter(condition).filter(
+        is_active=True,
+    ).exclude(profile__is_restricted=True)
 
 
 def match_users(owner, phones=None, emails=None, source='phone_contacts', request=None):
