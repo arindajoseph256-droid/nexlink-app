@@ -1,0 +1,60 @@
+{% load static %}<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="robots" content="noindex, nofollow" />
+<title>Nexlink Admin</title>
+<link rel="stylesheet" href="{% static 'css/base.css' %}?v=14" />
+<link rel="stylesheet" href="{% static 'css/admin.css' %}?v=1" />
+</head>
+<body class="admin-body">
+<div id="admin-root" class="admin-root" data-csrf="{% csrf_token %}">
+    <aside class="admin-sidebar" id="admin-sidebar">
+        <div class="admin-brand">
+            <img src="{% static 'images/icon-192.png' %}" alt="" class="admin-brand__logo" />
+            <span>NEXLINK <em>Admin</em></span>
+        </div>
+        <nav class="admin-nav" id="admin-nav">
+            <a href="#overview" data-section="overview" class="admin-nav__link is-active">Overview</a>
+            <a href="#users" data-section="users" class="admin-nav__link">Users</a>
+            <a href="#reports" data-section="reports" class="admin-nav__link">User Reports</a>
+            <a href="#groups" data-section="groups" class="admin-nav__link">Groups</a>
+            <a href="#messages" data-section="messages" class="admin-nav__link">Messages</a>
+            <a href="#announcements" data-section="announcements" class="admin-nav__link">Announcements</a>
+            <a href="#administrators" data-section="administrators" class="admin-nav__link">Administrators</a>
+            <a href="#audit" data-section="audit" class="admin-nav__link">Audit Logs</a>
+            <a href="#health" data-section="health" class="admin-nav__link">System Health</a>
+            <a href="#settings" data-section="settings" class="admin-nav__link">Platform Settings</a>
+        </nav>
+        <div class="admin-sidebar__footer">
+            <a href="/" class="admin-nav__link admin-nav__link--muted">&larr; Back to Nexus</a>
+        </div>
+    </aside>
+
+    <div class="admin-main">
+        <header class="admin-topbar">
+            <button class="admin-topbar__menu" id="admin-menu-toggle" aria-label="Menu">&#9776;</button>
+            <h1 id="admin-title" class="admin-topbar__title">Overview</h1>
+            <div class="admin-topbar__right" id="admin-me">
+                <span class="admin-role-pill" id="admin-role-pill">…</span>
+                <form method="post" action="/accounts/logout/" class="admin-logout">
+                    {% csrf_token %}
+                    <button type="submit" class="admin-btn admin-btn--ghost">Log out</button>
+                </form>
+            </div>
+        </header>
+        <main class="admin-content" id="admin-content" aria-live="polite">
+            <div class="admin-loading">Loading…</div>
+        </main>
+    </div>
+</div>
+<div id="admin-toast" class="admin-toast" role="status" hidden></div>
+<div id="admin-modal" class="admin-modal" hidden>
+    <div class="admin-modal__backdrop" data-close="1"></div>
+    <div class="admin-modal__card" id="admin-modal-card"></div>
+</div>
+
+<script src="{% static 'js/admin.js' %}?v=1"></script>
+</body>
+</html>

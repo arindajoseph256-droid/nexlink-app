@@ -48,6 +48,11 @@ def login_api(request):
         user = None
     if not user:
         return Response({'detail': 'Enter a correct phone number/email and password.'}, status=400)
+    # Suspended/deactivated accounts (admin panel) must not obtain tokens.
+    from .admin_gate import login_blocked_reason
+    blocked = login_blocked_reason(user)
+    if blocked:
+        return Response({'detail': blocked}, status=403)
     token, _ = Token.objects.get_or_create(user=user)
     return Response({'token': token.key, 'user': _user_payload(user)})
 
