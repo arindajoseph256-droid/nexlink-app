@@ -101,6 +101,7 @@ INSTALLED_APPS = [
     # Local apps
     'accounts',
     'messaging',
+    'admin_panel',
 ]
 
 MIDDLEWARE = [

@@ -69,6 +69,12 @@ class LoginView(auth_views.LoginView):
 
     def form_valid(self, form):
         user = form.get_user()
+        # Suspended/deactivated accounts (admin panel) must not sign in.
+        from .admin_gate import login_blocked_reason
+        blocked = login_blocked_reason(user)
+        if blocked:
+            form.add_error(None, blocked)
+            return self.form_invalid(form)
         remember_me = bool(form.cleaned_data.get('remember_me'))
         auth_login(self.request, user)
         self.request.session.set_expiry(1209600 if remember_me else 0)

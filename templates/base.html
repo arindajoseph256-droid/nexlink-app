@@ -50,6 +50,7 @@
                 <a href="{% url 'accounts:settings' %}" class="nav-link">Settings</a>
                 {% if user.is_staff %}
                     <a href="{% url 'accounts:panel_users' %}" class="nav-link">Admin</a>
+                    <a href="/admin-panel/" class="nav-link">Admin Panel</a>
                 {% endif %}
                 <button type="button" id="theme-toggle" class="nav-link nav-link--button"
                         aria-pressed="false" title="Toggle dark mode">
