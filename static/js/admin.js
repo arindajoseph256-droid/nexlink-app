@@ -607,6 +607,10 @@
                 check('s-maintenance', 'Maintenance mode', s.maintenance_mode, 'shows a maintenance notice in clients') +
                 check('s-announce', 'Announcements enabled', s.feature_announcements) +
                 check('s-calls', 'Calls enabled', s.feature_calls) +
+                '<label>Admin contact email</label>' +
+                '<input class="admin-input" id="s-admin-email" type="email" maxlength="254" placeholder="owner@example.com" value="' +
+                    esc(s.admin_email || '') + '"' + (canEdit ? '' : ' disabled') + ' />' +
+                '<p class="admin-hint">Shown across the panel and used as the From address for outgoing mail.</p>' +
                 '<label>Suspension default (days)</label>' +
                 '<input class="admin-input" id="s-susp-days" type="number" min="0" max="365" value="' + esc(s.suspension_default_days) + '"' + (canEdit ? '' : ' disabled') + ' />' +
                 '<div class="admin-modal__actions">' +
@@ -620,6 +624,7 @@
                     feature_announcements: document.getElementById('s-announce').checked,
                     feature_calls: document.getElementById('s-calls').checked,
                     suspension_default_days: Number(document.getElementById('s-susp-days').value) || 0,
+                    admin_email: (document.getElementById('s-admin-email').value || '').trim(),
                 };
                 var criticalChanged = body.maintenance_mode !== s.maintenance_mode ||
                     body.registration_open !== s.registration_open;

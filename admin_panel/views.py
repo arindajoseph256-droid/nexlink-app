@@ -1129,8 +1129,11 @@ def audit_logs(request):
 def settings_view(request):
     """Read current settings (secrets never exposed)."""
     settings_obj = PlatformSettings.for_site()
+    payload = s.PlatformSettingsSerializer(settings_obj).data
+    # Always show the resolved admin contact (setting → super admin → from).
+    payload['admin_email'] = settings_obj.effective_admin_email()
     return Response({
-        'settings': s.PlatformSettingsSerializer(settings_obj).data,
+        'settings': payload,
         'can_edit': has_caps(request.user, 'settings.edit'),
     })
 
@@ -1144,7 +1147,7 @@ def settings_update(request):
     data = request.data if isinstance(request.data, dict) else {}
     confirm = data.get('confirm')
     allowed_fields = [
-        'registration_open', 'maintenance_mode', 'maintenance_message',
+        'admin_email', 'registration_open', 'maintenance_mode', 'maintenance_message',
         'suspension_default_days', 'escalation_warning_threshold',
         'feature_announcements', 'feature_calls',
     ]
@@ -1156,7 +1159,16 @@ def settings_update(request):
             continue
         value = data[field]
         current = getattr(settings_obj, field)
-        if isinstance(current, bool):
+        if field == 'admin_email':
+            from django.core.validators import validate_email
+            from django.core.exceptions import ValidationError as DjangoValidationError
+            value = str(value or '').strip().lower()[:254]
+            try:
+                validate_email(value)
+            except DjangoValidationError:
+                errors[field] = 'Enter a valid email address.'
+                continue
+        elif isinstance(current, bool):
             value = bool(value)
         elif isinstance(current, int):
             try:
@@ -1187,7 +1199,9 @@ def settings_update(request):
         metadata={'changed': sorted(changes.keys()),
                   'report_categories': bool(data.get('report_categories_enabled'))},
     )
-    return Response(s.PlatformSettingsSerializer(settings_obj).data)
+    return Response(s.PlatformSettingsSerializer(settings_obj).data | {
+        'admin_email': settings_obj.effective_admin_email(),
+    })
 
 
 # --- system health ---------------------------------------------------------
