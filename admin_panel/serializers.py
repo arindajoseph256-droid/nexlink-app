@@ -202,7 +202,7 @@ class PlatformSettingsSerializer(serializers.ModelSerializer):
     class Meta:
         model = PlatformSettings
         fields = (
-            'id', 'registration_open', 'maintenance_mode', 'maintenance_message',
+            'id', 'admin_email', 'registration_open', 'maintenance_mode', 'maintenance_message',
             'suspension_default_days', 'escalation_warning_threshold',
             'report_categories_enabled', 'feature_announcements', 'feature_calls',
             'updated_at', 'updated_by',

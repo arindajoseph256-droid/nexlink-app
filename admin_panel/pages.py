@@ -92,7 +92,12 @@ class AdminSetupForm(forms.Form):
         help_text='Used to sign in. Include country code, e.g. +1 415 555 0100.',
     )
     first_name = forms.CharField(max_length=30, required=False, label='First name')
-    email = forms.EmailField(required=False, label='Email (optional)')
+    email = forms.EmailField(
+        required=False,
+        label='Email (optional)',
+        initial='arindajoseph256@gmail.com',
+        help_text='Platform admin contact — shown in the dashboard and used as the mail sender.',
+    )
     password = forms.CharField(
         widget=forms.PasswordInput,
         label='Password',
@@ -108,7 +113,7 @@ class AdminSetupForm(forms.Form):
         placeholders = {
             'phone_number': '+1 415 555 0100',
             'first_name': 'Alex',
-            'email': 'admin@example.com',
+            'email': 'arindajoseph256@gmail.com',
         }
         autocomplete = {
             'phone_number': 'tel',
@@ -176,7 +181,7 @@ def _create_first_super_admin(data):
             groups[role_name], _ = Group.objects.get_or_create(name=role_name)
 
         RoleRule.seed_defaults()
-        PlatformSettings.for_site()
+        platform_settings = PlatformSettings.for_site()
 
         user = User.objects.select_for_update().filter(
             phone_number=data['phone_number'],
@@ -211,6 +216,11 @@ def _create_first_super_admin(data):
         if data['first_name'].strip() and profile is not None:
             profile.display_name = data['first_name'].strip()[:50]
             profile.save(update_fields=['display_name'])
+
+        # Record the admin contact email chosen during first-run setup.
+        if data['email']:
+            platform_settings.admin_email = data['email']
+            platform_settings.save(update_fields=['admin_email'])
 
     return user
 

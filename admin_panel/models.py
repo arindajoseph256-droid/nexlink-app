@@ -444,6 +444,9 @@ class AuditLog(models.Model):
 class PlatformSettings(models.Model):
     """Admin-only, single-row configuration for runtime behavior toggles."""
 
+    # The platform's admin / sender contact address. Displayed in the
+    # dashboard settings panel and used as the fallback for DEFAULT_FROM_EMAIL.
+    admin_email = models.EmailField(blank=True, default='')
     registration_open = models.BooleanField(default=True)
     maintenance_mode = models.BooleanField(default=False)
     maintenance_message = models.CharField(max_length=300, blank=True)
@@ -468,6 +471,28 @@ class PlatformSettings(models.Model):
     def for_site(cls):
         settings_obj, _ = cls.objects.get_or_create(pk=1)
         return settings_obj
+
+    def effective_admin_email(self):
+        """Explicit setting → oldest Super Admin's email → DEFAULT_FROM_EMAIL.
+
+        Keeps the dashboard and outbound mail headed by the platform owner's
+        address even before ``admin_email`` is explicitly saved.
+        """
+        if self.admin_email:
+            return self.admin_email
+        from django.contrib.auth import get_user_model
+        superuser_email = (
+            get_user_model().objects
+            .filter(is_superuser=True, email__isnull=False)
+            .exclude(email='')
+            .order_by('date_joined')
+            .values_list('email', flat=True)
+            .first()
+        )
+        if superuser_email:
+            return superuser_email
+        from django.conf import settings as django_settings
+        return getattr(django_settings, 'DEFAULT_FROM_EMAIL', '')
 
 
 class EscalationRule(models.Model):

@@ -489,3 +489,90 @@ class FirstSuperAdminSetupTests(TestCase):
         finally:
             pages.SETUP_ATTEMPT_LIMIT = original
             cache.clear()
+
+
+class AdminEmailTests(TestCase):
+    """arindajoseph256@gmail.com is the platform admin/sender address."""
+
+    OWNER_EMAIL = 'arindajoseph256@gmail.com'
+
+    def make_superadmin(self):
+        user = User.objects.create_user(
+            phone_number='+14155550900', password='Super-secret-1',
+        )
+        user.is_staff = user.is_superuser = True
+        user.save(update_fields=['is_staff', 'is_superuser'])
+        return user
+
+    def test_default_from_email_is_the_owner_address(self):
+        from django.conf import settings
+        self.assertEqual(settings.DEFAULT_FROM_EMAIL, self.OWNER_EMAIL)
+
+    def test_settings_api_returns_effective_admin_email(self):
+        admin = self.make_superadmin()
+        client = auth_client(admin)
+        response = client.get('/api/admin/settings/')
+        self.assertEqual(response.status_code, 200)
+        # Nothing stored yet → falls back to DEFAULT_FROM_EMAIL.
+        self.assertEqual(response.data['settings']['admin_email'], self.OWNER_EMAIL)
+
+    def test_settings_api_prefers_superadmin_email_then_stored_override(self):
+        admin = self.make_superadmin()
+        admin.email = 'owner+super@example.org'
+        admin.save(update_fields=['email'])
+        client = auth_client(admin)
+        response = client.get('/api/admin/settings/')
+        self.assertEqual(response.data['settings']['admin_email'], 'owner+super@example.org')
+
+        # An explicit PlatformSettings value wins over both.
+        settings_obj = PlatformSettings.for_site()
+        settings_obj.admin_email = 'contact@example.org'
+        settings_obj.save(update_fields=['admin_email'])
+        response = client.get('/api/admin/settings/')
+        self.assertEqual(response.data['settings']['admin_email'], 'contact@example.org')
+
+    def test_settings_update_stores_valid_admin_email(self):
+        admin = self.make_superadmin()
+        client = auth_client(admin)
+        response = client.patch(
+            '/api/admin/settings/update/',
+            {'admin_email': 'New.Owner@Gmail.com'}, format='json',
+        )
+        self.assertEqual(response.status_code, 200)
+        PlatformSettings.for_site().refresh_from_db()
+        self.assertEqual(
+            PlatformSettings.for_site().admin_email,
+            'new.owner@gmail.com',
+        )
+        audit = AuditLog.objects.filter(action='settings_updated').first()
+        self.assertIsNotNone(audit)
+        self.assertIn('admin_email', (audit.metadata or {}).get('changed', []))
+
+    def test_settings_update_rejects_invalid_admin_email(self):
+        admin = self.make_superadmin()
+        client = auth_client(admin)
+        response = client.patch(
+            '/api/admin/settings/update/',
+            {'admin_email': 'not-an-email'}, format='json',
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('admin_email', response.data)
+
+    def test_setup_form_prefills_the_owner_email(self):
+        response = self.client.get('/admin-panel/setup/')
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, f'value="{self.OWNER_EMAIL}"')
+
+    def test_setup_seeds_platform_admin_email(self):
+        response = self.client.post('/admin-panel/setup/', {
+            'phone_number': '+14155550100',
+            'first_name': 'Root',
+            'email': self.OWNER_EMAIL,
+            'password': 'Vela-Quartz-77-Pine',
+            'password_confirm': 'Vela-Quartz-77-Pine',
+        })
+        self.assertEqual(response.status_code, 302)
+        settings_obj = PlatformSettings.for_site()
+        self.assertEqual(settings_obj.admin_email, self.OWNER_EMAIL)
+        user = User.objects.get(phone_number='+14155550100')
+        self.assertEqual(user.email, self.OWNER_EMAIL)

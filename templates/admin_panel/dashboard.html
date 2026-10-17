@@ -6,7 +6,7 @@
 <meta name="robots" content="noindex, nofollow" />
 <title>Nexlink Admin</title>
 <link rel="stylesheet" href="{% static 'css/base.css' %}?v=14" />
-<link rel="stylesheet" href="{% static 'css/admin.css' %}?v=1" />
+<link rel="stylesheet" href="{% static 'css/admin.css' %}?v=2" />
 </head>
 <body class="admin-body">
 <div id="admin-root" class="admin-root" data-csrf="{% csrf_token %}">
@@ -28,6 +28,7 @@
             <a href="#settings" data-section="settings" class="admin-nav__link">Platform Settings</a>
         </nav>
         <div class="admin-sidebar__footer">
+            <span class="admin-sidebar__meta">Nexlink Control &middot; owner admin</span>
             <a href="/" class="admin-nav__link admin-nav__link--muted">&larr; Back to Nexus</a>
         </div>
     </aside>
@@ -55,6 +56,6 @@
     <div class="admin-modal__card" id="admin-modal-card"></div>
 </div>
 
-<script src="{% static 'js/admin.js' %}?v=1"></script>
+<script src="{% static 'js/admin.js' %}?v=2"></script>
 </body>
 </html>

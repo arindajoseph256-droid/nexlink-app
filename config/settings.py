@@ -301,4 +301,8 @@ if not EMAIL_HOST_PASSWORD and EMAIL_HOST_PASSWORD_FILE:
             password_path.read_text(encoding='utf-8').split(),
         )
 EMAIL_USE_TLS = os.environ.get('EMAIL_USE_TLS', '1') == '1'
-DEFAULT_FROM_EMAIL = os.environ.get('DEFAULT_FROM_EMAIL', 'no-reply@chatapp.local')
+DEFAULT_FROM_EMAIL = os.environ.get(
+    'DEFAULT_FROM_EMAIL',
+    # Platform owner/admin contact — used for password resets and notices.
+    'arindajoseph256@gmail.com',
+)
