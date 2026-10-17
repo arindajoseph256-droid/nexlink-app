@@ -1,0 +1,142 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="robots" content="noindex, nofollow" />
+<title>Nexlink — One-time admin setup</title>
+<link rel="stylesheet" href="{% static 'css/base.css' %}?v=14" />
+<link rel="stylesheet" href="{% static 'css/admin.css' %}?v=1" />
+<style>
+    .setup-body {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 32px 18px;
+        min-height: 100vh;
+        background:
+            radial-gradient(1100px 520px at 12% -8%, rgba(116, 255, 214, .10), transparent 60%),
+            radial-gradient(900px 480px at 108% 112%, rgba(0, 168, 132, .12), transparent 55%),
+            var(--a-bg);
+    }
+    .setup-card {
+        width: min(560px, 100%);
+        background: var(--a-card);
+        border: 1px solid var(--a-border);
+        border-radius: 18px;
+        padding: 30px 30px 24px;
+        box-shadow: 0 24px 70px rgba(0, 0, 0, .35);
+    }
+    .setup-brand {
+        display: flex; align-items: center; gap: 10px;
+        font-weight: 700; letter-spacing: .05em; margin-bottom: 20px;
+    }
+    .setup-brand img { width: 30px; height: 30px; border-radius: 9px; }
+    .setup-brand em { font-style: normal; color: var(--a-accent); font-size: .78em; text-transform: uppercase; }
+    .setup-pill {
+        display: inline-block; background: var(--a-accent-dim); color: var(--a-accent);
+        font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .09em;
+        padding: 4px 11px; border-radius: 999px; margin-bottom: 12px;
+    }
+    .setup-card h1 { margin: 0 0 8px; font-size: 24px; line-height: 1.25; }
+    .setup-lead { margin: 0 0 20px; color: var(--a-muted); font-size: 14px; line-height: 1.55; }
+    .setup-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 14px; }
+    .setup-grid .setup-field--full { grid-column: 1 / -1; }
+    .setup-field { margin-bottom: 12px; }
+    .setup-field label { display: block; font-size: 13px; color: var(--a-muted); margin-bottom: 5px; }
+    .setup-field .admin-input { width: 100%; box-sizing: border-box; }
+    .setup-hint { margin: 5px 0 0; font-size: 12px; color: var(--a-muted); line-height: 1.45; }
+    .setup-error { margin: 5px 0 0; font-size: 12px; color: var(--a-danger); }
+    .setup-errors {
+        background: rgba(255, 93, 122, .12);
+        border: 1px solid rgba(255, 93, 122, .35);
+        color: var(--a-danger);
+        border-radius: 10px;
+        padding: 10px 13px;
+        font-size: 13px;
+        margin-bottom: 16px;
+        line-height: 1.5;
+    }
+    .setup-errors ul { margin: 0; padding-left: 18px; }
+    .setup-submit { width: 100%; padding: 12px 16px; font-size: 14px; margin-top: 8px; }
+    .setup-foot {
+        margin: 18px 0 0; padding-top: 14px;
+        border-top: 1px solid var(--a-border);
+        font-size: 12.5px; color: var(--a-muted); line-height: 1.55;
+    }
+    .setup-foot a { color: var(--a-accent); text-decoration: none; }
+    .setup-foot a:hover { text-decoration: underline; }
+    @media (max-width: 560px) {
+        .setup-card { padding: 24px 20px 20px; }
+        .setup-grid { grid-template-columns: 1fr; }
+        .setup-card h1 { font-size: 21px; }
+    }
+</style>
+</head>
+<body class="admin-body setup-body">
+<main class="setup-card">
+    <div class="setup-brand">
+        <img src="{% static 'images/icon-192.png' %}" alt="" />
+        <span>NEXLINK <em>Admin</em></span>
+    </div>
+
+    <span class="setup-pill">One-time setup</span>
+    <h1>Create the first Super&nbsp;Admin</h1>
+    <p class="setup-lead">
+        This deployment has no administrator yet. Build the owner account now —
+        it unlocks the <strong>/admin-panel/</strong> dashboard, moderation tools,
+        announcements and the audit log. <strong>This page disappears forever</strong>
+        the moment the account is created.
+    </p>
+
+    {% if form.non_field_errors %}
+        <div class="setup-errors" role="alert">
+            <ul>{% for error in form.non_field_errors %}<li>{{ error }}</li>{% endfor %}</ul>
+        </div>
+    {% endif %}
+
+    <form method="post" novalidate autocomplete="on">
+        {% csrf_token %}
+        <div class="setup-grid">
+            <div class="setup-field setup-field--full">
+                <label for="{{ form.phone_number.id_for_label }}">{{ form.phone_number.label }} *</label>
+                {{ form.phone_number }}
+                {% if form.phone_number.help_text %}<p class="setup-hint">{{ form.phone_number.help_text }}</p>{% endif %}
+                {% for error in form.phone_number.errors %}<p class="setup-error">{{ error }}</p>{% endfor %}
+            </div>
+            <div class="setup-field">
+                <label for="{{ form.first_name.id_for_label }}">{{ form.first_name.label }}</label>
+                {{ form.first_name }}
+                {% for error in form.first_name.errors %}<p class="setup-error">{{ error }}</p>{% endfor %}
+            </div>
+            <div class="setup-field">
+                <label for="{{ form.email.id_for_label }}">{{ form.email.label }}</label>
+                {{ form.email }}
+                {% for error in form.email.errors %}<p class="setup-error">{{ error }}</p>{% endfor %}
+            </div>
+            <div class="setup-field">
+                <label for="{{ form.password.id_for_label }}">Password *</label>
+                {{ form.password }}
+                {% if form.password.help_text %}<p class="setup-hint">{{ form.password.help_text }}</p>{% endif %}
+                {% for error in form.password.errors %}<p class="setup-error">{{ error }}</p>{% endfor %}
+            </div>
+            <div class="setup-field">
+                <label for="{{ form.password_confirm.id_for_label }}">Confirm password *</label>
+                {{ form.password_confirm }}
+                {% for error in form.password_confirm.errors %}<p class="setup-error">{{ error }}</p>{% endfor %}
+            </div>
+        </div>
+
+        <button type="submit" class="admin-btn setup-submit">Create Super Admin &amp; open dashboard</button>
+    </form>
+
+    <p class="setup-foot">
+        You will be signed in automatically as Super Admin. Afterwards, return via
+        <a href="{% url 'accounts:login' %}">the normal login page</a> — this setup
+        screen will no longer be reachable. Additional admins can be invited later
+        from <strong>Administrators</strong> inside the dashboard.
+    </p>
+</main>
+</body>
+</html>

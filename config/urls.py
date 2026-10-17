@@ -1,6 +1,6 @@
 """URL configuration for the messaging platform."""
 from config import health as views
-from admin_panel.pages import admin_home
+from admin_panel.pages import admin_home, admin_setup
 from django.conf import settings
 from django.contrib import admin
 from django.contrib.sitemaps.views import sitemap
@@ -17,6 +17,8 @@ urlpatterns = [
     path('api/auth/', include('accounts.api_urls')),
     path('api/', include('messaging.urls')),
     path('api/admin/', include('admin_panel.urls')),
+    # One-time first-Super-Admin prompt; closes itself once one exists.
+    path('admin-panel/setup/', admin_setup, name='admin_panel_setup'),
     path('admin-panel/', admin_home, name='admin_panel_home'),
     path('', include('messaging.page_urls')),
 ]
