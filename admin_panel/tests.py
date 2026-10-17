@@ -364,3 +364,128 @@ class ExistingFlowsRegressionTests(BaseRolesTestCase):
         self.assertTrue(login_ok)
         response = self.client.get('/admin-panel/')
         self.assertEqual(response.status_code, 200)
+
+
+class FirstSuperAdminSetupTests(TestCase):
+    """The one-time /admin-panel/setup/ prompt: appears → creates → disappears."""
+
+    VALID = {
+        'phone_number': '+14155550100',
+        'first_name': 'Root',
+        'email': '',
+        'password': 'Vela-Quartz-77-Pine',
+        'password_confirm': 'Vela-Quartz-77-Pine',
+    }
+
+    def tearDown(self):
+        from django.core.cache import cache
+        cache.clear()
+
+    def test_prompt_renders_only_while_no_super_admin(self):
+        response = self.client.get('/admin-panel/setup/')
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Create the first Super')
+        self.assertContains(response, 'csrfmiddlewaretoken')
+
+    def test_admin_panel_routes_to_setup_prompt(self):
+        response = self.client.get('/admin-panel/')
+        self.assertRedirects(response, '/admin-panel/setup/')
+
+    def test_post_creates_first_super_admin_and_signs_in(self):
+        response = self.client.post('/admin-panel/setup/', self.VALID, follow=True)
+        self.assertEqual(response.status_code, 200)
+        # The chain ends on the real admin dashboard shell.
+        self.assertContains(response, 'admin-root')
+
+        user = User.objects.get(phone_number='+14155550100')
+        self.assertTrue(user.is_superuser)
+        self.assertTrue(user.is_staff)
+        self.assertTrue(
+            user.groups.filter(name=ROLE_GROUP_NAMES[AdminRole.SUPER_ADMIN]).exists(),
+        )
+        self.assertEqual(self.client.session.get('_auth_user_id'), str(user.pk))
+        # Seeded configuration the dashboard depends on.
+        self.assertTrue(RoleRule.objects.filter(role=AdminRole.SUPER_ADMIN).exists())
+        self.assertTrue(PlatformSettings.objects.exists())
+
+    def test_prompt_disappears_after_creation(self):
+        self.client.post('/admin-panel/setup/', self.VALID)
+        self.client.logout()
+        # Setup page now bounces anonymous visitors to normal login…
+        response = self.client.get('/admin-panel/setup/')
+        self.assertRedirects(
+            response, '/accounts/login/?next=/admin-panel/setup/',
+        )
+        # …and /admin-panel/ no longer routes to the prompt either.
+        response = self.client.get('/admin-panel/')
+        self.assertRedirects(response, '/accounts/login/?next=/admin-panel/')
+
+    def test_second_post_cannot_mint_another_super_admin(self):
+        self.client.post('/admin-panel/setup/', self.VALID)
+        self.client.logout()
+        response = self.client.post(
+            '/admin-panel/setup/', {**self.VALID, 'phone_number': '+14155550101'},
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertFalse(User.objects.filter(phone_number='+14155550101').exists())
+        self.assertEqual(User.objects.filter(is_superuser=True).count(), 1)
+
+    def test_mismatched_and_weak_passwords_rejected(self):
+        response = self.client.post(
+            '/admin-panel/setup/',
+            {**self.VALID, 'password_confirm': 'other-pass-phrase-99'},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'The two passwords do not match.')
+
+        response = self.client.post(
+            '/admin-panel/setup/',
+            {**self.VALID, 'password': 'password123', 'password_confirm': 'password123'},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(User.objects.filter(is_superuser=True).exists())
+
+    def test_existing_account_promotion_requires_its_password(self):
+        existing = User.objects.create_user(
+            phone_number='+14155550123', password='Correct-horse-9',
+        )
+        # Wrong password → refused, account untouched.
+        response = self.client.post(
+            '/admin-panel/setup/', {**self.VALID, 'phone_number': '+14155550123'},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'already exists')
+        existing.refresh_from_db()
+        self.assertFalse(existing.is_superuser)
+
+        # Matching password → the existing account is promoted instead.
+        response = self.client.post(
+            '/admin-panel/setup/',
+            {
+                **self.VALID,
+                'phone_number': '+14155550123',
+                'password': 'Correct-horse-9',
+                'password_confirm': 'Correct-horse-9',
+            },
+            follow=True,
+        )
+        existing.refresh_from_db()
+        self.assertTrue(existing.is_superuser)
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'admin-root')
+
+    def test_setup_is_throttled_after_too_many_attempts(self):
+        from django.core.cache import cache
+        from admin_panel import pages
+
+        original = pages.SETUP_ATTEMPT_LIMIT
+        pages.SETUP_ATTEMPT_LIMIT = 2
+        try:
+            bad = {**self.VALID, 'password_confirm': 'mismatch-here-1'}
+            self.client.post('/admin-panel/setup/', bad)
+            self.client.post('/admin-panel/setup/', bad)
+            response = self.client.post('/admin-panel/setup/', bad)
+            self.assertEqual(response.status_code, 429)
+        finally:
+            pages.SETUP_ATTEMPT_LIMIT = original
+            cache.clear()
