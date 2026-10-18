@@ -263,6 +263,13 @@ GOOGLE_SITE_VERIFICATION = os.environ.get('GOOGLE_SITE_VERIFICATION', '').strip(
 # Bing Webmaster Tools verification token (optional, same mechanism).
 BING_SITE_VERIFICATION = os.environ.get('BING_SITE_VERIFICATION', '').strip()
 
+# Google Contacts discovery (People API). The OAuth client ID is public
+# information (not a secret) and is served to signed-in clients so they can
+# start the Google consent flow. Only the contacts.readonly scope is ever
+# requested — never Gmail. Tokens are used once server-side and discarded.
+GOOGLE_CONTACTS_CLIENT_ID = os.environ.get('GOOGLE_CONTACTS_CLIENT_ID', '').strip()
+GOOGLE_ANDROID_CLIENT_ID = os.environ.get('GOOGLE_ANDROID_CLIENT_ID', '').strip()
+
 # Default primary key field type
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 

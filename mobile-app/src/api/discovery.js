@@ -16,6 +16,19 @@ export function getPeopleSuggestions(limit = 20) {
   return request(`/api/contacts/suggestions/?limit=${limit}`);
 }
 
+/** Public OAuth config for Google Contacts (client IDs are not secrets). */
+export function getGoogleContactsConfig() {
+  return request('/api/contacts/google/config/');
+}
+
+/** POST the contacts.readonly Google access token; server matches + discards it. */
+export function matchGoogleContacts(accessToken) {
+  return request('/api/contacts/google/', {
+    method: 'POST',
+    body: JSON.stringify({ access_token: accessToken }),
+  });
+}
+
 /**
  * Read + normalize device contacts locally, then match against Nexlink.
  * Returns { results, rejected, submitted } where `submitted` is how many

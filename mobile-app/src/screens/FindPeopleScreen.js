@@ -5,7 +5,12 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 
-import { discoverContacts, getPeopleSuggestions, startConversation } from '../api';
+import * as AuthSession from 'expo-auth-session';
+
+import {
+  discoverContacts, getGoogleContactsConfig, getPeopleSuggestions,
+  matchGoogleContacts, startConversation,
+} from '../api';
 import { Avatar } from '../components/ui';
 import { ThemeContext } from '../theme/ThemeProvider';
 import { friendlyError } from '../utils/errors';
@@ -19,6 +24,7 @@ const INVITE_TEXT = 'Join me on Nexlink. Download Nexlink and chat with me. http
 
 function sourceLabel(person) {
   const sources = person.sources || [];
+  if (person.source === 'google_contacts') return 'From Google Contacts';
   if (sources.includes('phone')) return 'From your contacts';
   if (sources.includes('email')) return 'From your contacts (email)';
   if (person.is_contact) return 'From your NEXLINK contacts';
@@ -40,12 +46,21 @@ export function FindPeopleScreen() {
 
   const [suggestions, setSuggestions] = useState([]);
   const [matches, setMatches] = useState([]);
+  const [googleConfig, setGoogleConfig] = useState(null);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [error, setError] = useState('');
   const [permissionDenied, setPermissionDenied] = useState(false);
   const [lastSynced, setLastSynced] = useState(null);
   const [openChatId, setOpenChatId] = useState(null);
+  const [googleMatches, setGoogleMatches] = useState([]);
+  const [googleBusy, setGoogleBusy] = useState(false);
+
+  React.useEffect(() => {
+    getGoogleContactsConfig()
+      .then((config) => setGoogleConfig(config || {}))
+      .catch(() => setGoogleConfig({}));
+  }, []);
 
   const loadSuggestions = useCallback(async () => {
     try {
@@ -111,6 +126,45 @@ export function FindPeopleScreen() {
     try {
       await Linking.openURL(`sms:?&body=${encodeURIComponent(INVITE_TEXT)}`);
     } catch {}
+  }
+
+  /* Google Contacts discovery — contacts.readonly scope only, never Gmail.
+     The server calls the People API once with the token, extracts phone
+     numbers + emails (never names), matches them, then discards everything. */
+  async function syncGoogleContacts() {
+    setGoogleBusy(true);
+    setError('');
+    try {
+      const config = googleConfig || await getGoogleContactsConfig();
+      if (!config?.enabled) {
+        setError('Google Contacts is not configured on the server yet.');
+        return;
+      }
+      const authRequest = new AuthSession.AuthRequest({
+        clientId: (Platform.OS === 'android' && config.android_client_id)
+          ? config.android_client_id
+          : config.client_id,
+        scopes: [config.scope || 'https://www.googleapis.com/auth/contacts.readonly'],
+        responseType: AuthSession.ResponseType.Token,
+      });
+      const result = await authRequest.promptAsync();
+      const token = result?.params?.access_token;
+      if (result?.type !== 'success' || !token) {
+        setError('Google authorization was cancelled. You can retry anytime.');
+        return;
+      }
+      const data = await matchGoogleContacts(token);
+      const rows = data?.results || [];
+      if (rows.length) {
+        setGoogleMatches(rows);
+      } else {
+        setError('None of your Google Contacts have joined Nexlink yet.');
+      }
+    } catch (err) {
+      setError(friendlyError(err));
+    } finally {
+      setGoogleBusy(false);
+    }
   }
 
   const styles = makeStyles(colors);
@@ -183,6 +237,17 @@ export function FindPeopleScreen() {
                 ? <ActivityIndicator size="small" color={accent} />
                 : <Text style={{ color: accent, fontWeight: '800' }}>📱 Find people from my contacts</Text>}
             </TouchableOpacity>
+            {(googleConfig?.enabled ?? false) ? (
+              <TouchableOpacity
+                style={[styles.syncBtn, { borderColor: accent, marginTop: 10 }]}
+                onPress={syncGoogleContacts}
+                disabled={googleBusy}
+              >
+                {googleBusy
+                  ? <ActivityIndicator size="small" color={accent} />
+                  : <Text style={{ color: accent, fontWeight: '800' }}>🔎 Find people from Google Contacts</Text>}
+              </TouchableOpacity>
+            ) : null}
             {lastSynced ? (
               <Text style={[styles.syncedAt, { color: colors.muted }]}>
                 Last synced: {lastSynced.toLocaleTimeString()}
@@ -193,6 +258,11 @@ export function FindPeopleScreen() {
               <Text style={[styles.sectionTitle, { color: colors.muted }]}>CONTACTS ON NEXLINK</Text>
             ) : null}
             {matches.map((p) => renderPerson(p, true))}
+
+            {googleMatches.length > 0 ? (
+              <Text style={[styles.sectionTitle, { color: colors.muted }]}>FROM YOUR GOOGLE CONTACTS</Text>
+            ) : null}
+            {googleMatches.map((p) => renderPerson(p, true))}
 
             {suggestions.length > 0 ? (
               <Text style={[styles.sectionTitle, { color: colors.muted }]}>PEOPLE YOU MAY KNOW</Text>

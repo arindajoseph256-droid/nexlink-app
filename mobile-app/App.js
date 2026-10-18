@@ -56,13 +56,26 @@ export default function App() {
   }, [user]);
 
   const verifyConnectivity = useCallback(async () => {
+    /* GET (not HEAD):       filters proxies that drop
+       HEAD, cache-busting param avoids a stale 304-style reply, and the 10s
+       AbortController distinguishes "slow Render cold-start" from "no route".
+       The failure screen shows the exact host so a wrong server URL is
+       visible instead of guessing. */
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 10000);
     try {
-      await fetch(`${API_BASE_URL}/health/`, { method: 'HEAD', cache: 'no-store' });
+      const response = await fetch(
+        `${API_BASE_URL}/health/?boot=${Date.now()}`,
+        { method: 'GET', cache: 'no-store', signal: controller.signal },
+      );
+      if (!response.ok) throw new Error(`health ${response.status}`);
       setConnectivity(null);
       return true;
     } catch {
       setConnectivity('down');
       return false;
+    } finally {
+      clearTimeout(timer);
     }
   }, []);
 
@@ -281,6 +294,7 @@ export default function App() {
         <Text style={styles.connectBody}>
           Please check your internet connection or try again.
         </Text>
+        <Text style={styles.connectBody}>(trying {API_BASE_URL})</Text>
         <TouchableOpacity style={styles.retryButton} onPress={retryConnection} activeOpacity={0.8}>
           <Text style={styles.retryText}>Retry</Text>
         </TouchableOpacity>

@@ -1306,6 +1306,80 @@ def conversation_media(request, conversation_id):
 # ---------------------------------------------------------------------------
 
 @api_view(['GET'])
+@permission_classes([permissions.AllowAny])
+def google_contacts_config(request):
+    """Public OAuth client configuration for Google Contacts discovery.
+
+    Client IDs are public information (they're embedded in every web page
+    that starts a Google consent flow). No secret is ever returned. The
+    ``enabled`` flag lets clients hide the Google button when the project
+    has not been configured yet.
+    """
+    from .google_contacts import (
+        GOOGLE_CONTACTS_SCOPE,
+        google_android_client_id,
+        google_client_id,
+        google_contacts_enabled,
+    )
+
+    return Response({
+        'enabled': google_contacts_enabled(),
+        'client_id': google_client_id(),
+        'android_client_id': google_android_client_id(),
+        'scope': GOOGLE_CONTACTS_SCOPE,
+        'explanatory_text': 'Allow Nexlink to find people you know from your Google Contacts.',
+    })
+
+
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+@throttle_classes([ScopedRateThrottle])
+@throttle_scope('contact_match')
+def contacts_google(request):
+    """Match contacts from a user-authorized Google access token.
+
+    The client obtains the token with the ``contacts.readonly`` scope only
+    (never Gmail) and POSTs it here. The server calls the Google People API
+    once, extracts phone numbers + emails (never names), matches them via
+    the shared discovery service, and discards everything. The token is
+    never stored or logged.
+    """
+    from .google_contacts import (
+        GoogleContactsError,
+        fetch_google_contacts,
+        normalize_google_identifiers,
+    )
+    from .discovery import match_users
+
+    token = (request.data.get('access_token') or '').strip()
+    if not 20 <= len(token) <= 4096:
+        return Response(
+            {'detail': 'A Google access token is required.'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    try:
+        phones, emails, _connections = fetch_google_contacts(token)
+    except GoogleContactsError as exc:
+        return Response({'detail': str(exc)}, status=exc.status)
+
+    normalized_phones, normalized_emails = normalize_google_identifiers(phones, emails)
+    if not normalized_phones and not normalized_emails:
+        return Response({'results': []})
+
+    try:
+        results = match_users(
+            request.user,
+            phones=normalized_phones,
+            emails=normalized_emails,
+            source='google_contacts',
+            request=request,
+        )
+    except ValueError as exc:
+        return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+    return Response({'results': results})
+
+@api_view(['GET'])
 @permission_classes([permissions.IsAuthenticated])
 @throttle_classes([ScopedRateThrottle])
 @throttle_scope('search')

@@ -2020,11 +2020,16 @@
     }
 
     /* ---------- find people (contact discovery: WhatsApp/Instagram-style) ---------- */
+    var GOOGLE_CONTACTS_SCOPE = 'https://www.googleapis.com/auth/contacts.readonly';
+    var GSI_SCRIPT_URL = 'https://accounts.google.com/gsi/client';
+    var gsiLoadPromise = null;
+
     function discoverySourceLabel(p) {
         var sources = p.sources || [];
         if (sources.indexOf('phone') >= 0) return 'From your contacts';
         if (sources.indexOf('email') >= 0) return 'From your contacts (email)';
-        if (p.is_contact || p.source === 'phone_contacts' || p.source === 'google_contacts') return 'From your contacts';
+        if (p.source === 'google_contacts') return 'From Google Contacts';
+        if (p.is_contact || p.source === 'phone_contacts') return 'From your contacts';
         if (p.mutual_contacts > 0) return p.mutual_contacts + ' mutual contact' + (p.mutual_contacts === 1 ? '' : 's');
         if (p.shared_groups > 0) return p.shared_groups === 1 ? 'Shared group' : 'Member of ' + p.shared_groups + ' groups with you';
         if (p.source === 'nexlink') return 'You may know each other';
@@ -2036,20 +2041,147 @@
             '<div class="sub">' + esc(discoverySourceLabel(p)) + '</div></div>' +
             '<div class="member-actions"><button class="btn btn-primary btn-sm" data-discover-chat="' + p.id + '">Chat</button></div></div>';
     }
+
+    function loadGsi() {
+        /* Google Identity Services is loaded lazily, only when the user taps
+           "Find from Google Contacts". Nothing loads before a tap — no Google
+           JS runs on the dashboard until the user asks for it. */
+        if (window.google && window.google.accounts) return Promise.resolve(true);
+        if (gsiLoadPromise) return gsiLoadPromise;
+        gsiLoadPromise = new Promise(function (resolve, reject) {
+            var script = document.createElement('script');
+            script.src = GSI_SCRIPT_URL;
+            script.async = true;
+            script.onload = function () {
+                resolve(Boolean(window.google && window.google.accounts));
+            };
+            script.onerror = function () {
+                gsiLoadPromise = null;
+                reject(new Error('Could not load Google sign-in. Check your connection.'));
+            };
+            document.head.appendChild(script);
+        });
+        return gsiLoadPromise;
+    }
+
+    var findPeopleContext = null;
+
+    function showFindPeopleMatches(rows, heading) {
+        if (!findPeopleContext) return;
+        var section = $('#findPeopleContactsSection');
+        var list = $('#findPeopleContactsList');
+        var title = $('#findPeopleContactsTitle');
+        if (!section || !list) return;
+        section.style.display = 'block';
+        if (heading) title.textContent = heading;
+        var current = list.getAttribute('data-count') | 0;
+        list.innerHTML = rows.map(discoveryRowHtml).join('') + list.innerHTML;
+        list.setAttribute('data-count', String(current + rows.length));
+        $all('[data-discover-chat]').forEach(function (b) {
+            b.addEventListener('click', function () { startChatWith(Number(b.dataset.discoverChat)); closeFindPeople(); });
+        });
+    }
+
+    function closeFindPeople() {
+        if ($('#findPeopleBack')) $('#modalRoot').innerHTML = '';
+        findPeopleContext = null;
+    }
+
+    /* Browser Contact Picker API (Chrome/Android, Edge): the user physically
+       picks the contacts to share — full consent, one at a time. Only phone
+       numbers and emails leave the browser, names never do. */
+    function contactPickerSupported() {
+        return !!(navigator.contacts && typeof navigator.contacts.select === 'function');
+    }
+
+    function runPhoneContactPicker() {
+        /* Chrome's Contact Picker: name is used only to confirm, and the
+           browser never gives us more than what the user explicitly picks. */
+        navigator.contacts
+            .select(['name', 'tel', 'email'], { multiple: true })
+            .then(function (contacts) {
+            if (!contacts || !contacts.length) return;
+            var phones = [];
+            var emails = [];
+            contacts.forEach(function (contact) {
+                (contact.tel || []).forEach(function (prop) {
+                    if (prop && prop.value) phones.push(prop.value);
+                });
+                (contact.email || []).forEach(function (prop) {
+                    if (prop && prop.value) emails.push(prop.value);
+                });
+            });
+            if (!phones.length && !emails.length) {
+                toast('The selected contacts had no phone number or email.');
+                return;
+            }
+            API.post('/api/contacts/match/', {
+                phones: phones.slice(0, 200),
+                emails: emails.slice(0, 200),
+                source: 'phone_contacts',
+            }).then(function (data) {
+                var rows = (data && data.results) || [];
+                if (rows.length) showFindPeopleMatches(rows, 'From your selected contacts');
+                else toast('None of those people are on NEXLINK yet — invite them!');
+            }).catch(function (err) { toast(err.message || 'Contact matching failed.'); });
+        }).catch(function () { /* user cancelled the picker */ });
+    }
+
+    function runGoogleContactSync(clientId) {
+        loadGsi().then(function () {
+            if (!clientId) { toast('Google Contacts is not configured on this server.'); return; }
+            var tokenClient = window.google.accounts.oauth2.initTokenClient({
+                client_id: clientId,
+                scope: GOOGLE_CONTACTS_SCOPE,
+                callback: function (response) {
+                    var token = response && response.access_token;
+                    if (!token) {
+                        toast(response && response.error_description
+                            ? response.error_description : 'Google authorization was cancelled.');
+                        return;
+                    }
+                    API.post('/api/contacts/google/', { access_token: token })
+                        .then(function (data) {
+                            var rows = (data && data.results) || [];
+                            if (rows.length) {
+                                showFindPeopleMatches(rows, 'From your Google Contacts');
+                                toast('Google Contacts synced.');
+                            } else {
+                                toast('None of your Google Contacts are on NEXLINK yet.');
+                            }
+                        })
+                        .catch(function (err) { toast(err.message || 'Google Contacts sync failed.'); })
+                        .finally(function () {
+                            /* Google recommends revoking once done. */
+                            try {
+                                window.google.accounts.oauth2.revoke(token, function () {});
+                            } catch (e) { /* non-critical */ }
+                        });
+                },
+                error_callback: function (err) {
+                    toast(err && err.message ? err.message : 'Google authorization failed.');
+                },
+            });
+            tokenClient.requestAccessToken({ prompt: 'consent' });
+        }).catch(function (err) { toast(err.message || 'Could not load Google sign-in.'); });
+    }
+
     function openFindPeopleView() {
         var root = $('#modalRoot');
+        findPeopleContext = root;
         root.innerHTML = '<div class="modal-back" id="findPeopleBack" style="align-items:flex-start;padding-top:6vh">' +
             '<div class="modal" style="width:min(560px,100%);max-height:86vh">' +
             '<div class="modal-head"><h3>Find People</h3><button class="icon-btn" id="findPeopleClose">' + ICONS.x + '</button></div>' +
             '<div class="modal-body" style="padding-top:8px">' +
             '<div id="findPeopleState" style="text-align:center;color:var(--text-3);font-size:13px;padding:12px">Loading suggestions…</div>' +
             '<div id="findPeopleContactsSection" style="display:none">' +
-            '<div class="result-group-title" style="margin-top:10px">Contacts on NEXLINK</div>' +
-            '<div id="findPeopleContactsList"></div>' +
-            '<div style="display:flex;gap:8px;margin:10px 0 4px">' +
-            '<button class="btn btn-outline" style="flex:1" id="btnFindPhoneContacts">📱 Find from my saved contacts</button>' +
+            '<div class="result-group-title" style="margin-top:10px" id="findPeopleContactsTitle">Contacts on NEXLINK</div>' +
+            '<div id="findPeopleContactsList" data-count="0"></div>' +
+            '<div style="display:flex;gap:8px;margin:10px 0 4px;flex-wrap:wrap">' +
+            '<button class="btn btn-outline" style="flex:1" id="btnFindPhoneContacts">📱 Find from my contacts</button>' +
+            '<button class="btn btn-outline" style="flex:1;display:none" id="btnFindGoogleContacts">🔎 Find from Google Contacts</button>' +
             '</div>' +
-            '<div id="phoneMatchHint" style="display:none;color:var(--text-3);font-size:12.5px;margin:4px 0 10px">The Android app matches your phone’s address book; on web, save people as contacts below and we’ll match their numbers.</div>' +
+            '<div id="phoneMatchHint" style="display:none;color:var(--text-3);font-size:12.5px;margin:4px 0 10px">The Android app matches your whole address book; here, you choose which contacts to check. Only phone numbers and emails are used — your contact list is never stored.</div>' +
             '</div>' +
             '<div id="findPeopleSuggestionsSection" style="display:none">' +
             '<div class="result-group-title" style="margin-top:14px">People You May Know</div>' +
@@ -2057,7 +2189,7 @@
             '</div>' +
             '<div id="findPeopleSync" style="display:none;color:var(--text-3);font-size:12px;margin-top:6px"></div>' +
             '</div></div></div>';
-        var close = function () { root.innerHTML = ''; };
+        var close = function () { closeFindPeople(); };
         $('#findPeopleClose').addEventListener('click', close);
         $('#findPeopleBack').addEventListener('click', function (e) { if (e.target.id === 'findPeopleBack') close(); });
         bindDiscoveryChats(close);
@@ -2068,13 +2200,48 @@
             });
         }
 
-        Promise.all([
+        function bindSourceButtons() {
+            var btnPhone = $('#btnFindPhoneContacts');
+            if (!btnPhone) return;
+            if (contactPickerSupported()) {
+                btnPhone.addEventListener('click', runPhoneContactPicker);
+            } else {
+                btnPhone.addEventListener('click', function () {
+                    $('#phoneMatchHint').style.display = 'block';
+                });
+            }
+            var btnGoogle = $('#btnFindGoogleContacts');
+            if (!btnGoogle) return;
+            API.get('/api/contacts/google/config/').then(function (config) {
+                if (!config || !config.enabled || !config.client_id) return;
+                btnGoogle.style.display = '';
+                btnGoogle.title = config.explanatory_text || 'Allow Nexlink to find people you know from your Google Contacts.';
+                btnGoogle.addEventListener('click', function () {
+                    runGoogleContactSync(config.client_id);
+                });
+            }).catch(function () { /* config unavailable → button stays hidden */ });
+        }
+
+        Promise.allSettled([
             API.get('/api/chats/people/'),
             API.get('/api/contacts/suggestions/'),
-        ]).then(function (results) {
+        ]).then(function (settled) {
+            var results = settled.map(function (item) {
+                return item.status === 'fulfilled' ? item.value : { results: [] };
+            });
             var people = ((results[0] && results[0].results) || []);
             var suggestions = ((results[1] && results[1].results) || []);
+            var failed = settled.filter(function (item) { return item.status === 'rejected'; });
             var state = $('#findPeopleState');
+            if (failed.length === settled.length) {
+                if (state) {
+                    var detail = failed[0].reason && failed[0].reason.message;
+                    state.textContent = detail
+                        ? 'Could not load this list: ' + detail
+                        : 'Could not load suggestions. Check your connection and try again.';
+                }
+                return;
+            }
             if (state) state.remove();
             var contactsSection = $('#findPeopleContactsSection');
             var suggestionsSection = $('#findPeopleSuggestionsSection');
@@ -2082,15 +2249,18 @@
             if (people.length) {
                 contactsSection.style.display = 'block';
                 $('#findPeopleContactsList').innerHTML = people.slice(0, 12).map(discoveryRowHtml).join('');
+                $('#findPeopleContactsList').setAttribute('data-count', String(Math.min(people.length, 12)));
             }
             if (suggestions.length) {
                 suggestionsSection.style.display = 'block';
                 $('#findPeopleSuggestionsList').innerHTML = suggestions.map(discoveryRowHtml).join('');
             }
             bindDiscoveryChats(function () { close(); });
-            $('#btnFindPhoneContacts').addEventListener('click', function () {
-                $('#phoneMatchHint').style.display = 'block';
-            });
+            bindSourceButtons();
+            if (failed.length) {
+                var failDetail = failed[0].reason && failed[0].reason.message;
+                toast('Some suggestions unavailable' + (failDetail ? ': ' + failDetail : '.'));
+            }
         }).catch(function () {
             var state = $('#findPeopleState');
             if (state) state.textContent = 'Could not load suggestions. Check your connection and try again.';
