@@ -10,9 +10,13 @@
     var content = document.getElementById('admin-content');
     var titleEl = document.getElementById('admin-title');
     var rolePill = document.getElementById('admin-role-pill');
-    var toastEl = document.getElementById('admin-toast');
+    var toastsEl = document.getElementById('admin-toasts');
     var modalEl = document.getElementById('admin-modal');
     var modalCard = document.getElementById('admin-modal-card');
+    var sidebarEl = document.getElementById('admin-sidebar');
+    var menuBtn = document.getElementById('admin-menu-toggle');
+    var scrimEl = document.getElementById('admin-scrim');
+    var crumbEl = document.getElementById('admin-crumb');
 
     var state = { me: null, usersPage: 1, usersQuery: '', statusFilter: '' };
 
@@ -38,11 +42,15 @@
     }
 
     function toast(message, isError) {
-        toastEl.textContent = message;
-        toastEl.classList.toggle('is-error', Boolean(isError));
-        toastEl.hidden = false;
-        clearTimeout(toastEl._t);
-        toastEl._t = setTimeout(function () { toastEl.hidden = true; }, 4000);
+        var el = document.createElement('div');
+        el.className = 'admin-toast' + (isError ? ' is-error' : '');
+        el.textContent = message;
+        toastsEl.appendChild(el);
+        while (toastsEl.children.length > 4) toastsEl.removeChild(toastsEl.firstChild);
+        setTimeout(function () {
+            el.classList.add('is-hiding');
+            setTimeout(function () { if (el.parentNode) el.parentNode.removeChild(el); }, 220);
+        }, 3800);
     }
 
     function esc(value) {
@@ -96,6 +104,11 @@
     }
 
     // ------------- navigation -------------
+    var SECTIONS_TITLES = {
+        overview: 'Overview', users: 'Users', reports: 'User Reports', groups: 'Groups',
+        messages: 'Messages', announcements: 'Announcements', administrators: 'Administrators',
+        audit: 'Audit Logs', health: 'System Health', settings: 'Platform Settings',
+    };
     var SECTIONS = {
         overview: { title: 'Overview', render: renderOverview },
         users: { title: 'Users', render: renderUsers },
@@ -112,12 +125,15 @@
     function navigate(section) {
         if (!SECTIONS[section]) section = 'overview';
         var meta = SECTIONS[section];
-        titleEl.textContent = meta.title;
+        var title = SECTIONS_TITLES[section] || meta.title;
+        titleEl.textContent = title;
+        if (crumbEl) crumbEl.textContent = title;
+        document.title = 'Nexlink — ' + title;
         content.innerHTML = '<div class="admin-loading">Loading…</div>';
         document.querySelectorAll('.admin-nav__link').forEach(function (link) {
             link.classList.toggle('is-active', link.dataset.section === section);
         });
-        if (window.innerWidth < 860) document.getElementById('admin-sidebar').classList.remove('is-open');
+        closeDrawer();
         meta.render().catch(function (err) {
             content.innerHTML = '<div class="admin-error">Could not load ' + esc(meta.title) + ': ' + esc(err.message) + '</div>';
         });
@@ -129,11 +145,150 @@
         e.preventDefault();
         window.location.hash = link.dataset.section;
     });
-    document.getElementById('admin-menu-toggle').addEventListener('click', function () {
-        document.getElementById('admin-sidebar').classList.toggle('is-open');
+
+    // ------------- drawer / collapse -------------
+    function openDrawer() {
+        if (window.innerWidth >= 1024) return;
+        sidebarEl.classList.add('is-open');
+        if (scrimEl) scrimEl.hidden = false;
+        menuBtn.setAttribute('aria-expanded', 'true');
+    }
+    function closeDrawer() {
+        if (window.innerWidth >= 1024) return;
+        sidebarEl.classList.remove('is-open');
+        if (scrimEl) scrimEl.hidden = true;
+        menuBtn.setAttribute('aria-expanded', 'false');
+    }
+    menuBtn.addEventListener('click', function () {
+        if (sidebarEl.classList.contains('is-open')) closeDrawer(); else openDrawer();
     });
+    if (scrimEl) scrimEl.addEventListener('click', closeDrawer);
+
+    var collapseBtn = document.getElementById('admin-collapse');
+    if (collapseBtn) {
+        try {
+            if (localStorage.getItem('admin-sidebar-collapsed') === '1') root.classList.add('is-collapsed');
+        } catch (e) { /* private mode */ }
+        collapseBtn.addEventListener('click', function () {
+            var collapsed = root.classList.toggle('is-collapsed');
+            try { localStorage.setItem('admin-sidebar-collapsed', collapsed ? '1' : '0'); } catch (e) { /* private mode */ }
+        });
+    }
+
     window.addEventListener('hashchange', function () {
         navigate((window.location.hash || '#overview').slice(1));
+    });
+
+    // ------------- command palette -------------
+    var paletteEl = document.getElementById('admin-palette');
+    var paletteInput = document.getElementById('admin-palette-input');
+    var paletteList = document.getElementById('admin-palette-list');
+    var paletteItems = [];
+    var paletteActive = 0;
+    var paletteLastFocus = null;
+
+    function paletteCommands() {
+        var items = [];
+        document.querySelectorAll('.admin-nav__link[data-section]').forEach(function (link) {
+            var section = link.dataset.section;
+            if (!SECTIONS[section]) return;
+            items.push({
+                icon: 'grid',
+                label: SECTIONS_TITLES[section] || section,
+                group: 'Go to',
+                run: function () { window.location.hash = section; },
+            });
+        });
+        items.push({ icon: 'message', label: 'Open Messages', group: 'Workspace', run: function () { window.location.href = '/chats/'; } });
+        items.push({ icon: 'users', label: 'Export users as CSV', group: 'Action', run: function () { window.location.href = '/api/admin/users/export/'; } });
+        items.push({ icon: 'megaphone', label: 'New announcement', group: 'Action', run: function () {
+            window.location.hash = 'announcements';
+            setTimeout(function () { if (typeof newAnnouncement === 'function') newAnnouncement(); }, 350);
+        } });
+        return items;
+    }
+
+    function renderPalette(query) {
+        var q = (query || '').toLowerCase().trim();
+        var all = paletteCommands();
+        var items = q
+            ? all.filter(function (c) { return (c.label).toLowerCase().indexOf(q) !== -1 || c.group.toLowerCase().indexOf(q) !== -1; })
+            : all;
+        paletteItems = items;
+        paletteActive = Math.min(paletteActive, Math.max(0, items.length - 1));
+        if (!items.length) {
+            paletteList.innerHTML = '<div class="palette-empty">No results</div>';
+            return;
+        }
+        var icoMap = {
+            grid: '<rect x="3" y="3" width="7" height="7" rx="1.6"/><rect x="14" y="3" width="7" height="7" rx="1.6"/><rect x="3" y="14" width="7" height="7" rx="1.6"/><rect x="14" y="14" width="7" height="7" rx="1.6"/>',
+            users: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/>',
+            message: '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',
+            megaphone: '<path d="m3 11 18-6v14l-18-6v-2Z"/>',
+        };
+        var html = '';
+        var lastGroup = null;
+        items.forEach(function (item, i) {
+            if (item.group !== lastGroup) {
+                html += '<div class="palette-group-label">' + esc(item.group) + '</div>';
+                lastGroup = item.group;
+            }
+            html += '<div class="palette-item' + (i === paletteActive ? ' is-active' : '') + '" data-palette-index="' + i + '">' +
+                '<svg class="ico" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + (icoMap[item.icon] || '') + '</svg>' +
+                '<span>' + esc(item.label) + '</span>' +
+                '<span class="group-tag">' + esc(item.group) + '</span>' +
+                '</div>';
+        });
+        paletteList.innerHTML = html;
+        var active = paletteList.querySelector('.palette-item.is-active');
+        if (active) active.scrollIntoView({ block: 'nearest' });
+    }
+
+    function openPalette() {
+        if (paletteEl.hidden === false) return;
+        closeDrawer();
+        paletteLastFocus = document.activeElement;
+        paletteActive = 0;
+        paletteEl.hidden = false;
+        paletteInput.value = '';
+        renderPalette('');
+        requestAnimationFrame(function () { paletteInput.focus(); });
+    }
+    function closePalette() {
+        if (paletteEl.hidden) return;
+        paletteEl.hidden = true;
+        if (paletteLastFocus && paletteLastFocus.focus) paletteLastFocus.focus();
+        paletteLastFocus = null;
+    }
+
+    document.getElementById('admin-palette-btn').addEventListener('click', openPalette);
+    paletteEl.querySelector('.palette-backdrop').addEventListener('click', closePalette);
+    paletteList.addEventListener('click', function (e) {
+        var item = e.target.closest('[data-palette-index]');
+        if (!item) return;
+        var command = paletteItems[Number(item.dataset.paletteIndex)];
+        closePalette();
+        if (command) command.run();
+    });
+    paletteInput.addEventListener('input', function () { paletteActive = 0; renderPalette(paletteInput.value); });
+
+    document.addEventListener('keydown', function (e) {
+        if ((e.metaKey || e.ctrlKey) && (e.key === 'k' || e.key === 'K')) {
+            e.preventDefault();
+            if (paletteEl.hidden) openPalette(); else closePalette();
+            return;
+        }
+        if (!paletteEl.hidden) {
+            if (e.key === 'Escape') { e.preventDefault(); closePalette(); }
+            else if (e.key === 'ArrowDown') { e.preventDefault(); paletteActive = Math.min(paletteActive + 1, paletteItems.length - 1); renderPalette(paletteInput.value); }
+            else if (e.key === 'ArrowUp') { e.preventDefault(); paletteActive = Math.max(paletteActive - 1, 0); renderPalette(paletteInput.value); }
+            else if (e.key === 'Enter') {
+                e.preventDefault();
+                var command = paletteItems[paletteActive];
+                closePalette();
+                if (command) command.run();
+            }
+        }
     });
 
     // ------------- sections -------------
@@ -141,6 +296,7 @@
         return api('dashboard/').then(function (data) {
             var u = data.users || {}, m = data.moderation || {};
             content.innerHTML =
+                greetingHtml(data) +
                 '<div class="admin-cards">' +
                     card('Total users', u.total) +
                     card('Active users', u.active) +
@@ -161,6 +317,19 @@
                             esc(a.target_type + ' ' + (a.target_id || '')), badge(a.outcome)];
                     })) + '</div>';
         });
+    }
+
+    // Nickname greeting + resolved date, shown above the stat cards.
+    function greetingHtml(data) {
+        var name = (state.me && state.me.display_name) || 'Administrator';
+        var firstName = name.split(/\s+/)[0];
+        var when = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+        var users = data.users || {};
+        return '<div class="admin-greeting"><div class="admin-greeting__row"><div>' +
+            '<h2>Welcome back, ' + esc(firstName) + '</h2>' +
+            '<p>' + esc(when) + ' · live platform stats from the database.</p></div>' +
+            '<div class="admin-greeting__actions"><a class="admin-btn" href="/chats/">Open Messages</a></div>' +
+            '</div></div>';
     }
 
     function card(label, value, tone) {
@@ -637,9 +806,26 @@
     }
 
     // ------------- boot -------------
+    function initialsFor(name) {
+        return String(name || 'AD').split(/\s+/).filter(Boolean).slice(0, 2)
+            .map(function (w) { return w[0].toUpperCase(); }).join('') || 'AD';
+    }
+
+    function applyIdentity(me) {
+        var name = me.display_name || 'Administrator';
+        var role = (me.roles && me.roles.length) ? me.roles.join(', ') : (me.is_superuser ? 'Super Administrator' : 'no admin role');
+        rolePill.textContent = role;
+        var nameEl = document.getElementById('admin-user-name');
+        var roleEl = document.getElementById('admin-user-role');
+        var avatarEl = document.getElementById('admin-avatar');
+        if (nameEl) nameEl.textContent = name;
+        if (roleEl) roleEl.textContent = role;
+        if (avatarEl) avatarEl.textContent = initialsFor(name);
+    }
+
     api('me/').then(function (me) {
         state.me = me;
-        rolePill.textContent = (me.roles && me.roles.join(', ')) || 'no admin role';
+        applyIdentity(me);
         var allowed = me.permissions || [];
         // Hide sections the role cannot open: the backend still enforces caps.
         document.querySelectorAll('.admin-nav__link[data-section]').forEach(function (link) {
