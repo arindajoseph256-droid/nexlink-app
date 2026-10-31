@@ -9,6 +9,7 @@ import json
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase
+from django.utils.functional import SimpleLazyObject
 from rest_framework.test import APIClient
 
 from .discovery import (
@@ -326,3 +327,33 @@ class DiscoveryAPISecurityTests(TestCase):
         response = self.client.post('/api/contacts/match/', {'phones': phones}, format='json')
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data['results'], [])
+
+
+class SuggestionsLazyUserTests(TestCase):
+    """Regression: request.user is a SimpleLazyObject wrapper under session auth.
+
+    Calling ``type(owner)`` on it returned the wrapper class, so the old
+    ``type(owner).objects`` queryset raised AttributeError. The concrete
+    user model must be resolved via get_user_model() instead.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.alice = make_user('+14155554001', 'alice4@example.com', 'Alice')
+        cls.bob = make_user('+14155554002', 'bob4@example.com', 'Bob')
+        Contact.objects.create(owner=cls.alice, contact=cls.bob)
+
+    def test_suggestions_with_lazily_wrapped_user(self):
+        owner = SimpleLazyObject(lambda: User.objects.get(pk=self.alice.pk))
+        self.assertEqual(type(owner).__name__, 'SimpleLazyObject')  # the trap
+        results = suggestions_for(owner, limit=20)
+        self.assertEqual([r['id'] for r in results], [self.bob.pk])
+
+    def test_suggestions_endpoint_with_lazy_session_user(self):
+        from django.core.cache import cache
+        cache.clear()
+        client = APIClient()
+        client.force_login(self.alice)
+        response = client.get('/api/contacts/suggestions/')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual([r['id'] for r in response.data['results']], [self.bob.pk])

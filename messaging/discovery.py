@@ -17,6 +17,7 @@ address book persists on the server.
 """
 import phonenumbers
 from django.conf import settings
+from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.core.validators import EmailValidator
 
@@ -385,7 +386,12 @@ def suggestions_for(owner, request=None, limit=20):
 
     users = {
         user.pk: user
-        for user in type(owner).objects.filter(pk__in=candidate_ids, is_active=True).select_related('profile')
+        # request.user arrives as a lazily-wrapped user (SimpleLazyObject),
+        # so ``type(owner)`` is the wrapper class, not the user model —
+        # resolve the concrete model through get_user_model() instead.
+        for user in get_user_model().objects
+        .filter(pk__in=candidate_ids, is_active=True)
+        .select_related('profile')
     }
     profile_map = _profile_map(candidate_ids)
     mutual_counts = _mutual_counts(owner, list(users), cap=limit)
